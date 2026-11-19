@@ -16,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -176,7 +177,7 @@ fun NewsPanel(session: NewsSession, state: NewsUiState) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ListView(session: NewsSession, state: NewsUiState) {
+private fun ColumnScope.ListView(session: NewsSession, state: NewsUiState) {
     var searchText by remember { mutableStateOf("") }
     fun doSearch() {
         if (searchText.isNotBlank()) { session.openFromUi(searchText.trim()); searchText = "" }
@@ -309,7 +310,7 @@ private fun NewsCard(item: NewsItem, number: Int, total: Int, modifier: Modifier
 // ============================================================================ detay
 
 @Composable
-private fun DetailView(session: NewsSession, state: NewsUiState) {
+private fun ColumnScope.DetailView(session: NewsSession, state: NewsUiState) {
     val context = LocalContext.current
     val item = state.items[state.index]
     fun openLink(url: String) {
