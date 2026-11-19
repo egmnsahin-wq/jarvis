@@ -4,6 +4,7 @@ import android.content.Context
 import com.jarvis.assistant.ai.AssistantAi
 import com.jarvis.assistant.ai.JarvisIntent
 import com.jarvis.assistant.data.PreferencesManager
+import com.jarvis.assistant.speaker.SpeakerContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -28,17 +29,43 @@ class CommandProcessor(
     private val getLastKnownLocation: () -> Pair<Double, Double>?
 ) {
     private val callLogController by lazy { CallLogController(context) }
+    private val calendarController by lazy { CalendarController(context) }
 
     /** Set by the UI right after the user picks a file — lets voice commands like
      * "bu dosyayı analiz et" refer to "the file I just picked" without needing a filename. */
     var lastPickedFileUri: android.net.Uri? = null
 
+    /** Haber paneli sesli komutları (açık/sonraki/önceki/detay/ara...). Eşleşmezse null döner. */
+    var newsHandler: (suspend (String) -> String?)? = null
+
+    /** Gemini "NEWS" intent'i geldiğinde haber panelini de açar. */
+    var newsOpener: (suspend (String?) -> Unit)? = null
+
     suspend fun process(rawText: String): String {
-        return try {
-            processInternal(rawText)
+        val reply = try {
+            appendRetryPromptIfFailure(processInternal(rawText))
         } catch (e: Exception) {
-            "Komutu işlerken bir hata oldu: ${e.message ?: e::class.simpleName}"
+            appendRetryPromptIfFailure("Komutu işlerken bir hata oldu: ${e.message ?: e::class.simpleName}")
         }
+        // Ses tanıma bir kişiyi (yeniden) tanıdıysa, ilk cevabın başına isimle bir selam ekler.
+        val greeting = SpeakerContext.greetingIfNew(context)
+        return if (greeting != null) "$greeting $reply" else reply
+    }
+
+    private val FAILURE_WORDS = listOf(
+        "bulamadım", "bulunamadı", "açılamadı", "gönderilemedi", "ulaşamadım", "yapamadım",
+        "olmadı", "başarısız", "hata oldu", "sorun oldu", "izin vermen lazım", "anahtarı girilmemiş",
+        "bağlantı hatası", "anlayamadım", "tanımlı değil"
+    )
+    private val RETRY_PHRASES = listOf(
+        " Tekrar dener misin?", " İstersen tekrar söyle.", " Bir daha dener misin?", " Tekrar deneyeyim mi?"
+    )
+
+    private fun appendRetryPromptIfFailure(reply: String): String {
+        val isFailure = FAILURE_WORDS.any { reply.contains(it, ignoreCase = true) }
+        if (!isFailure) return reply
+        val phrase = RETRY_PHRASES[kotlin.math.abs(reply.hashCode()) % RETRY_PHRASES.size]
+        return if (reply.trimEnd().endsWith("?")) reply else reply.trimEnd() + phrase
     }
 
     private suspend fun processInternal(rawText: String): String {
@@ -53,6 +80,9 @@ class CommandProcessor(
             }
             return results.joinToString(" ")
         }
+
+        // Haber paneli komutları ("haberleri göster", "sonraki", "detay", "ekonomi haberlerini ara"...)
+        newsHandler?.invoke(text)?.let { return it }
 
         // If the sentence names one of the registered remote phones, skip the fast keyword
         // rules entirely (they only know about THIS device) and let Gemini's REMOTE_* intent
@@ -263,8 +293,10 @@ class CommandProcessor(
                 val msg = result.message
                 if (name != null && msg != null) {
                     val number = phoneController.findContactNumber(name)
-                    if (number != null) whatsAppController.sendMessage(number, msg)
-                    else "$name adında bir kişi bulamadım."
+                    if (number != null) {
+                        val channel = PreferencesManager.getPreference(context, "whatsapp_kanal") ?: "app"
+                        whatsAppController.sendMessage(number, msg, channel)
+                    } else "$name adında bir kişi bulamadım."
                 } else result.reply
             }
             "OPEN_APP" -> {
@@ -283,6 +315,9 @@ class CommandProcessor(
             "TV_SET_VOLUME" -> result.tvVolume?.let { TvController.setVolume(context, it) } ?: result.reply
             "TV_MUTE" -> TvController.mute(context)
             "TV_UNMUTE" -> TvController.unmute(context)
+            "TV_SEARCH_YOUTUBE" -> result.query?.let {
+                TvController.openUrl(context, "https://www.youtube.com/results?search_query=${java.net.URLEncoder.encode(it, "UTF-8")}")
+            } ?: result.reply
             "REMOTE_PLAY_SONG" -> remoteDispatch(result) { phone -> RemotePhoneController.playSong(context, phone, result.song ?: result.query ?: "") }
             "REMOTE_SEARCH_GOOGLE" -> remoteDispatch(result) { phone -> RemotePhoneController.searchGoogle(context, phone, result.query ?: "") }
             "REMOTE_SEARCH_YOUTUBE" -> remoteDispatch(result) { phone -> RemotePhoneController.searchYoutube(context, phone, result.query ?: "") }
@@ -377,9 +412,9 @@ class CommandProcessor(
             }
             "CALCULATE" -> result.query?.let { CalculatorController.evaluate(it) } ?: result.reply
             "CURRENCY" -> result.query?.let { CurrencyController.lookup(it) } ?: result.reply
-            "NEWS" -> NewsController.headlines(result.query)
+            "NEWS" -> { newsOpener?.invoke(result.query); NewsController.headlines(result.query) }
             "DAILY_SUMMARY" -> buildDailySummary()
-            "CONVERSATION_EXPORT" -> HistoryExportController.export(context, AssistantAi.getHistorySnapshot())
+            "CONVERSATION_EXPORT" -> HistoryExportController.export(context, AssistantAi.getHistorySnapshot(context))
             "HOME_WIFI_SET" -> {
                 val ssid = result.wifiSsid
                 if (ssid != null) { PreferencesManager.setHomeWifiSsid(context, ssid); "Ev Wi-Fi ağını \"$ssid\" olarak kaydettim." }
@@ -422,6 +457,35 @@ class CommandProcessor(
                 else FileAnalysisController.createFile(context, topic, null)
             }
             "SCREEN_ASK" -> ScreenUnderstandingController.ask(context, result.query)
+            "TRANSLATE" -> {
+                val text = result.query
+                val lang = result.translateTo
+                if (text == null || lang == null) "Neyi hangi dile çevirmemi istediğini anlayamadım."
+                else AssistantAi.analyzeTextSmart(context, "Şu metni $lang diline çevir, sadece çeviriyi yaz, başka açıklama ekleme: \"$text\"")
+            }
+            "CALENDAR_ADD_EVENT" -> {
+                val title = result.eventTitle
+                if (title == null) "Takvime ne eklememi istediğini anlayamadım."
+                else calendarController.addEvent(title, result.eventDaysFromNow ?: 0, result.hour, result.minute)
+            }
+            "CALENDAR_TODAY" -> calendarController.eventsToday()
+            "LEAVE_REMINDER" -> {
+                val msg = result.message
+                val homeSsid = PreferencesManager.getHomeWifiSsid(context)
+                when {
+                    msg == null -> "Ne hatırlatmamı istediğini anlayamadım."
+                    homeSsid.isBlank() -> "Önce ev Wi-Fi ağını ayarlamam lazım, \"ev wifi ağımı [ağ adı] olarak ayarla\" diyebilirsin."
+                    else -> { PreferencesManager.addLeaveReminder(context, msg); "Evden çıkarken hatırlatacağım." }
+                }
+            }
+            "PREFERENCE_SET" -> {
+                val key = result.prefKey
+                val value = result.prefValue
+                if (key != null && value != null) {
+                    PreferencesManager.setPreference(context, key, value)
+                    result.reply
+                } else "Hangi tercihi kaydetmemi istediğini tam anlayamadım."
+            }
             else -> result.reply // CHAT or unrecognized
         }
     }

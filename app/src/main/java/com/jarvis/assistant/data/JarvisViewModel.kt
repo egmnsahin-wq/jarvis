@@ -28,8 +28,7 @@ data class JarvisUiState(
     val transcript: String = "",
     val response: String = "Hazırım. Konuşmak için mikrofona bas ya da arka plan dinlemeyi aç.",
     val history: List<Pair<String, String>> = emptyList(), // (user, jarvis) pairs
-    val backgroundListeningEnabled: Boolean = false,
-    val speakTypedReplies: Boolean = false // typed messages get a spoken reply only if this is on
+    val backgroundListeningEnabled: Boolean = false
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
@@ -59,6 +58,14 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         onDone = { _uiState.value = _uiState.value.copy(voiceState = VoiceState.IDLE) }
     )
 
+    /** Haber paneli (başlık gezme, detay, arama, el hareketi) durumu. */
+    val news = NewsSession(viewModelScope) { text -> tts.speak(text) }
+
+    init {
+        commandProcessor.newsHandler = { text -> news.handleVoice(text) }
+        commandProcessor.newsOpener = { query -> news.open(query) }
+    }
+
     fun onMicButtonPressed() {
         if (speechRecognizer == null) {
             speechRecognizer = SpeechRecognizerManager(
@@ -79,26 +86,6 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         speechRecognizer?.startListening()
     }
 
-    /** Message typed in the text box: runs through the exact same pipeline as spoken commands. */
-    fun onTextSubmitted(text: String) {
-        val t = text.trim()
-        if (t.isEmpty() || _uiState.value.voiceState == VoiceState.THINKING) return
-        _uiState.value = _uiState.value.copy(transcript = t, voiceState = VoiceState.THINKING)
-        viewModelScope.launch {
-            val reply = commandProcessor.process(t)
-            _uiState.value = _uiState.value.copy(
-                response = reply,
-                history = _uiState.value.history + (t to reply),
-                voiceState = VoiceState.IDLE
-            )
-            if (_uiState.value.speakTypedReplies) tts.speak(reply)
-        }
-    }
-
-    fun toggleSpeakTypedReplies() {
-        _uiState.value = _uiState.value.copy(speakTypedReplies = !_uiState.value.speakTypedReplies)
-    }
-
     /** Turns the always-on "say Jarvis to wake" background service on/off. */
     fun toggleBackgroundListening(enabled: Boolean) {
         val app = getApplication<Application>()
@@ -114,6 +101,12 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
             app.startService(intent)
         }
         _uiState.value = _uiState.value.copy(backgroundListeningEnabled = enabled)
+    }
+
+    /** Typed command from the text input field — goes through the exact same pipeline as voice. */
+    fun onTextSubmitted(text: String) {
+        if (text.isBlank()) return
+        handleRecognizedSpeech(text.trim())
     }
 
     private fun handleRecognizedSpeech(text: String) {

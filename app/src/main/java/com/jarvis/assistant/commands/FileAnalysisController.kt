@@ -39,7 +39,7 @@ object FileAnalysisController {
             append("\n\n--- DOSYA İÇERİĞİ ---\n")
             append(trimmed)
         }
-        return AssistantAi.analyzeText(context, prompt)
+        return AssistantAi.analyzeTextSmart(context, prompt)
     }
 
     /** Analyzes a file and writes the analysis into a NEW file, then opens the share sheet. */
@@ -52,7 +52,7 @@ object FileAnalysisController {
 
     /** Generates fresh content from a free-form request and saves it as a .txt file. */
     suspend fun createFile(context: Context, request: String, suggestedName: String?): String {
-        val content = AssistantAi.analyzeText(
+        val content = AssistantAi.analyzeTextSmart(
             context,
             "Kullanıcı şunu istiyor: \"$request\". Bunun için düzgün, kullanılabilir bir dosya " +
                 "içeriği yaz (sadece içerik, başka açıklama ekleme)."

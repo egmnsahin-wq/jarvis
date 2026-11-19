@@ -101,7 +101,11 @@ class JarvisBackgroundService : Service() {
         registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
 
-    /** "Eve varınca X hatırlat"'ın gerçeklendiği yer: eve varış, kayıtlı ev Wi-Fi'sine bağlanmak. */
+    /** "Eve varınca X hatırlat" / "evden çıkınca X hatırlat" — ev Wi-Fi'sine bağlanma/bağlantının
+     * kesilmesi anını izler. wasOnHomeWifi, art arda gelen aynı-durum bildirimlerinde tekrar tekrar
+     * tetiklenmemek için GEÇİŞ anını yakalar. */
+    private var wasOnHomeWifi: Boolean? = null
+
     private fun registerWifiArrivalWatcher() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -109,11 +113,23 @@ class JarvisBackgroundService : Service() {
                 if (homeSsid.isBlank()) return
                 val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager ?: return
                 val currentSsid = try { wifiManager.connectionInfo?.ssid?.trim('"') } catch (e: SecurityException) { null }
-                if (currentSsid != null && currentSsid.equals(homeSsid, ignoreCase = true)) {
+                val isOnHomeWifi = currentSsid != null && currentSsid.equals(homeSsid, ignoreCase = true)
+
+                val previous = wasOnHomeWifi
+                wasOnHomeWifi = isOnHomeWifi
+                if (previous == isOnHomeWifi) return // durum değişmedi, bir geçiş yok
+
+                if (isOnHomeWifi) {
                     val pending = PreferencesManager.getArrivalReminders(this@JarvisBackgroundService)
                     if (pending.isNotEmpty() && ::tts.isInitialized) {
                         tts.speak("Eve hoş geldin! " + pending.joinToString(". "))
                         PreferencesManager.clearArrivalReminders(this@JarvisBackgroundService)
+                    }
+                } else if (previous == true) { // evden az önce çıkıldı (ilk okuma değil, gerçek bir ayrılış)
+                    val pending = PreferencesManager.getLeaveReminders(this@JarvisBackgroundService)
+                    if (pending.isNotEmpty() && ::tts.isInitialized) {
+                        tts.speak("İyi günler! " + pending.joinToString(". "))
+                        PreferencesManager.clearLeaveReminders(this@JarvisBackgroundService)
                     }
                 }
             }
@@ -147,7 +163,13 @@ class JarvisBackgroundService : Service() {
             context = this,
             onResult = { text -> handleResult(text) },
             onError = { handler.postDelayed({ if (mode == Mode.WAKE_WORD) startListeningWakeWord() }, 500) },
-            onListeningStateChanged = { }
+            onListeningStateChanged = { },
+            // Arka plan dinlemede her lafı değil, sadece komutu (uyandırma kelimesi geçen ya da
+            // komut modunda söylenen cümleyi) kimin söylediğini belirle.
+            identifyFilter = { text ->
+                mode == Mode.COMMAND ||
+                    text.lowercase(java.util.Locale("tr")).contains(PreferencesManager.getWakeWord(this))
+            }
         )
     }
 

@@ -14,19 +14,22 @@ import android.net.Uri
  */
 class WhatsAppController(private val context: Context) {
 
-    fun sendMessage(phoneNumber: String, message: String): String {
+    /** channel: "app" (wa.me -> WhatsApp uygulaması, varsayılan) veya "web" (web.whatsapp.com). */
+    fun sendMessage(phoneNumber: String, message: String, channel: String = "app"): String {
         val cleanNumber = phoneNumber.filter { it.isDigit() || it == '+' }
+        val url = if (channel == "web")
+            "https://web.whatsapp.com/send?phone=$cleanNumber&text=${Uri.encode(message)}"
+        else
+            "https://wa.me/$cleanNumber?text=${Uri.encode(message)}"
         return try {
-            val intent = Intent(
-                Intent.ACTION_VIEW,
-                Uri.parse("https://wa.me/$cleanNumber?text=${Uri.encode(message)}")
-            ).apply {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
-            "WhatsApp'ı mesajla birlikte açtım, göndermek için Gönder'e basman yeterli."
+            val where = if (channel == "web") "Web WhatsApp'ı" else "WhatsApp'ı"
+            "$where mesajla birlikte açtım, göndermek için Gönder'e basman yeterli."
         } catch (e: Exception) {
-            "WhatsApp açılamadı, kurulu olduğundan emin ol."
+            "WhatsApp açılamadı."
         }
     }
 }

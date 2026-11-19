@@ -18,6 +18,6 @@ object ScreenUnderstandingController {
         else
             "Bu bir telefon ekran görüntüsü. Kullanıcının sorusunu bu ekrana bakarak cevapla: \"$question\""
 
-        return AssistantAi.analyzeImage(context, prompt, imageBase64)
+        return AssistantAi.analyzeVision(context, prompt, imageBase64)
     }
 }

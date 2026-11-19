@@ -3,10 +3,9 @@
 Tablet ve telefonda çalışan, tamamen ücretsiz araçlarla yapılmış Jarvis tarzı sesli asistan.
 
 ## Özellikler
-- ⌨️ **Yazarak konuşma** (v18): alttaki kutuya yaz, gönder; sesli komutlarla aynı işi yapar. Hoparlör simgesi yazılı mesajlara sesli cevabı açar/kapatır
 - 🎙️ **Push-to-talk** ses girişi (Android'in yerleşik SpeechRecognizer'ı — ücretsiz)
 - 🔊 **Doğal sesli çıkış** (cihazın Google TTS motoru, en yüksek kaliteli Türkçe ses otomatik seçilir)
-- 🧠 **İki yapay zeka birlikte**: normal sohbet/komutlar Groq, ekran ve dosya analizi Gemini; biri hata verir/limite takılırsa otomatik diğeri devreye girer (v17+)
+- 🧠 **Akıllı sohbet / soru-cevap** (Gemini API — ücretsiz kota)
 - ☀️ **Hava durumu** (Open-Meteo — key gerektirmez, tamamen ücretsiz)
 - ⏰ **Saat, alarm, sayaç** (cihazın kendi Saat uygulamasına entegre)
 - 📞 **Telefon kontrolü**: rehberden arama, SMS gönderme, uygulama açma
@@ -77,6 +76,10 @@ Home Assistant seçersen, doğrudan REST API + access token kullanan özel bir i
 - Konum, hava durumu için `getLastKnownLocation` kullanıyor (basit/pilsiz); daha hassas konum için `FusedLocationProviderClient` eklenebilir.
 - Ev otomasyonu şu an "boş" — cihaz eklemeden komut verirsen Jarvis bunu söyler.
 
-
-## Tabletten derleme (GitHub Actions)
-Bu klasörü bir GitHub deposuna (Termux + git ile) gönder; `.github/workflows/build.yml` APK'yı bulutta derler. Actions > Build APK > Artifacts > jarvis-debug-apk indir, kur. API anahtarlarını uygulamada Ayarlar'dan gir.
+## Haber paneli (el hareketi + dokunma + ses)
+- Ana ekranda sol üstteki gazete simgesi ya da "haberleri göster" ile açılır.
+- **El hareketi** (panelde el simgesi → kamera izni): açık el sağdan sola = sonraki, soldan sağa = önceki,
+  işaret parmağını kameraya yaklaştır = detay, geri çek = listeye dön. Ön/arka kamera düğmesi vardır.
+- **Dokunma**: kartları kaydır, karta dokun = detay, arama kutusu ve konu çipleri.
+- **Ses**: "sonraki", "önceki", "detay", "3. haber", "oku", "ekonomi haberlerini ara", "kapat".
+- El modeli ilk kullanımda internetten indirilir (veya `app/src/main/assets/hand_landmarker.task` olarak koyabilirsin).

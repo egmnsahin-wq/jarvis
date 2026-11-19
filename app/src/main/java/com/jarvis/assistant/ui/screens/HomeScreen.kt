@@ -41,18 +41,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import com.jarvis.assistant.data.JarvisViewModel
+import androidx.compose.material.icons.filled.Article
 import com.jarvis.assistant.ui.components.JarvisOrb
+import com.jarvis.assistant.ui.components.NewsPanel
 import com.jarvis.assistant.ui.components.VoiceState
 import com.jarvis.assistant.ui.theme.JarvisBlue
 import com.jarvis.assistant.ui.theme.JarvisOrange
@@ -80,6 +77,15 @@ fun HomeScreen(
                 .padding(top = 16.dp, end = 16.dp)
         ) {
             Icon(Icons.Filled.Settings, contentDescription = "Ayarlar", tint = JarvisTextSecondary)
+        }
+
+        IconButton(
+            onClick = { viewModel.news.openFromUi(null) },
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 16.dp, start = 16.dp)
+        ) {
+            Icon(Icons.Filled.Article, contentDescription = "Haberler", tint = JarvisBlue)
         }
 
         Column(
@@ -167,6 +173,36 @@ fun HomeScreen(
                 }
             }
 
+            // Text input — types a command through the exact same pipeline as voice.
+            var typedText by remember { mutableStateOf("") }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                OutlinedTextField(
+                    value = typedText,
+                    onValueChange = { typedText = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Yazarak sor...") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = MaterialTheme.colorScheme.onBackground,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onBackground
+                    )
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = {
+                    if (typedText.isNotBlank()) {
+                        viewModel.onTextSubmitted(typedText)
+                        typedText = ""
+                    }
+                }) {
+                    Icon(Icons.Filled.Send, contentDescription = "Gönder", tint = JarvisBlue)
+                }
+            }
+
             // Mic button — standalone now, the orb above already carries the visual feedback.
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val context = LocalContext.current
@@ -223,56 +259,17 @@ fun HomeScreen(
                 }
             }
 
-            // Typed input — same pipeline as voice. The speaker icon decides whether typed
-            // messages also get a spoken reply (off by default: you're probably typing because
-            // you can't talk right now).
-            var typed by rememberSaveable { mutableStateOf("") }
-            val sendTyped = {
-                if (typed.isNotBlank()) {
-                    viewModel.onTextSubmitted(typed)
-                    typed = ""
-                }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            ) {
-                OutlinedTextField(
-                    value = typed,
-                    onValueChange = { typed = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Yazarak sor ya da komut ver...") },
-                    maxLines = 3,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { sendTyped() })
-                )
-                IconButton(onClick = { viewModel.toggleSpeakTypedReplies() }) {
-                    Icon(
-                        imageVector = if (state.speakTypedReplies) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
-                        contentDescription = "Yazılı mesajlara sesli cevap",
-                        tint = if (state.speakTypedReplies) JarvisOrange else JarvisTextSecondary
-                    )
-                }
-                IconButton(
-                    onClick = { sendTyped() },
-                    enabled = typed.isNotBlank() && state.voiceState != VoiceState.THINKING
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Send,
-                        contentDescription = "Gönder",
-                        tint = if (typed.isNotBlank()) JarvisBlue else JarvisTextSecondary
-                    )
-                }
-            }
-
             Text(
                 text = if (state.transcript.isNotBlank()) "\"${state.transcript}\"" else "Basılı tutmadan tek dokun, konuş",
                 style = MaterialTheme.typography.labelSmall,
                 color = JarvisTextSecondary,
                 modifier = Modifier.padding(top = 16.dp)
             )
+        }
+
+        val newsState by viewModel.news.state.collectAsState()
+        if (newsState.visible) {
+            NewsPanel(session = viewModel.news, state = newsState)
         }
     }
 }

@@ -1,108 +1,245 @@
 package com.jarvis.assistant.ai
 
 import android.content.Context
+import com.jarvis.assistant.data.PeopleStore
 import com.jarvis.assistant.data.PreferencesManager
+import com.jarvis.assistant.speaker.SpeakerContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
- * Single entry point for all AI work. Two providers, routed by TASK, with automatic fallback:
+ * Single entry point CommandProcessor (and file/screen analysis) calls into. Tries a pool of
+ * free AI providers in order and automatically falls through to the next one whenever a call
+ * fails or is rate-limited — so running out of one provider's free daily quota doesn't stop
+ * Jarvis from answering, as long as at least one other provider has a key configured.
  *
- *  - Normal chat / command understanding -> the provider chosen in Settings (default Groq: fast,
- *    roomy free limits), then the other one.
- *  - Screen questions (images)           -> Gemini first, then Groq vision.
- *  - File analysis / file creation       -> Gemini first (huge context), then Groq.
+ * Three independent provider orders:
+ *  - "simple" tier: used for the frequent, lightweight structured-command classification.
+ *    Fast/generous providers go first since this runs on every single utterance.
+ *  - "smart" tier: used for heavier free-form reasoning (file analysis, file creation).
+ *    The strongest providers go first since quality matters more than speed here.
+ *  - "vision" tier: used for image understanding (screen reading, image files). Only providers
+ *    that reliably support free-tier vision are included.
  *
- * "Fallback" = ANY failure of the first provider (limit, server error, retired model, no
- * internet...), not just 429. Only providers that have an API key are tried.
+ * Add a new free provider by adding one entry to [hasKey] and the relevant call* function —
+ * everything else (fallback, ordering) is handled generically.
  */
 object AssistantAi {
 
-    private enum class Provider { GEMINI, GROQ }
+    // Guests (nobody recognized) keep a short in-memory history only; recognized people get a
+    // persistent per-person history via PeopleStore.
+    private val guestHistory = mutableListOf<Pair<String, String>>()
 
-    // Shared across providers so conversation context survives a fallback swap.
-    private val history = mutableListOf<Pair<String, String>>()
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val profileUpdating = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private const val PROFILE_EVERY_TURNS = 6
 
-    private const val NO_KEY_MESSAGE =
-        "Henüz hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan Groq veya Gemini anahtarı ekler misin?"
+    // Groq (existing)
+    private const val GROQ_BASE = "https://api.groq.com/openai/v1"
+    private const val GROQ_MODEL = "openai/gpt-oss-120b"
 
-    private fun hasKey(context: Context, p: Provider): Boolean = when (p) {
-        Provider.GEMINI -> GeminiClient.hasApiKey(context)
-        Provider.GROQ -> GroqClient.hasApiKey(context)
+    // OpenRouter — aggregates many providers' free models under one key; "openrouter/free"
+    // auto-selects a free model that supports what the request needs (incl. vision).
+    private const val OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+    private const val OPENROUTER_MODEL = "openrouter/free"
+
+    // Mistral La Plateforme — free tier, mistral-small-latest supports text + vision.
+    private const val MISTRAL_BASE = "https://api.mistral.ai/v1"
+    private const val MISTRAL_MODEL = "mistral-small-latest"
+
+    // Cerebras — very fast free tier, text only (no vision).
+    private const val CEREBRAS_BASE = "https://api.cerebras.ai/v1"
+    private const val CEREBRAS_SIMPLE_MODEL = "llama3.1-8b"
+    private const val CEREBRAS_SMART_MODEL = "llama-3.3-70b"
+
+    private val simpleTierOrder = listOf("groq", "cerebras", "mistral", "openrouter", "gemini")
+    private val smartTierOrder = listOf("gemini", "openrouter", "groq", "cerebras", "mistral")
+    private val visionTierOrder = listOf("gemini", "openrouter", "mistral")
+
+    private fun hasKey(context: Context, provider: String): Boolean = when (provider) {
+        "gemini" -> GeminiClient.hasApiKey(context)
+        "groq" -> GroqClient.hasApiKey(context)
+        "openrouter" -> PreferencesManager.getOpenRouterApiKey(context).isNotBlank()
+        "mistral" -> PreferencesManager.getMistralApiKey(context).isNotBlank()
+        "cerebras" -> PreferencesManager.getCerebrasApiKey(context).isNotBlank()
+        else -> false
     }
 
-    private fun order(context: Context, vararg wanted: Provider): List<Provider> =
-        wanted.filter { hasKey(context, it) }
+    fun configuredProviderCount(context: Context): Int =
+        listOf("gemini", "groq", "openrouter", "mistral", "cerebras").count { hasKey(context, it) }
 
-    private suspend fun <T> firstSuccess(providers: List<Provider>, call: suspend (Provider) -> T): T {
-        var last: AiException? = null
-        for (p in providers) {
-            try {
-                return call(p)
-            } catch (e: AiException) {
-                last = e
-            }
-        }
-        throw last ?: AiException(0, "Kullanılabilir yapay zeka yok")
-    }
+    // ---------- Structured intent classification ----------
 
     suspend fun classify(context: Context, userInput: String): JarvisIntent {
-        val groqFirst = PreferencesManager.getAiProvider(context) != "gemini"
-        val providers = if (groqFirst) order(context, Provider.GROQ, Provider.GEMINI)
-        else order(context, Provider.GEMINI, Provider.GROQ)
-        if (providers.isEmpty()) return JarvisIntent(intent = "CHAT", reply = NO_KEY_MESSAGE)
+        // Captured once up front so the whole request (prompt, history, saving the turn) is about
+        // the same person even if identification updates while the network call is in flight.
+        val speakerId = SpeakerContext.currentId(context)
+        val history = loadHistory(context, speakerId)
 
-        val result = try {
-            firstSuccess(providers) { p ->
-                when (p) {
-                    Provider.GROQ -> GroqClient.classify(context, userInput, history)
-                    Provider.GEMINI -> GeminiClient.classify(context, userInput, history)
-                }
+        // The user's chosen primary provider (Settings > Ana Yapay Zeka) goes first if it has a
+        // key, then the rest of the simple-tier order fills in as fallbacks.
+        val primary = PreferencesManager.getAiProvider(context)
+        val order = (listOf(primary) + simpleTierOrder).distinct().filter { hasKey(context, it) }
+
+        var result: JarvisIntent? = null
+        for (provider in order) {
+            val attempt = callClassify(context, provider, userInput, history)
+            if (!IntentSchema.isFailureReply(attempt)) {
+                result = attempt
+                break
             }
-        } catch (e: AiException) {
-            return JarvisIntent(intent = "CHAT", reply = IntentSchema.friendlyErrorMessage(e.code, "Yapay zeka"))
         }
+        val finalResult = result ?: JarvisIntent(
+            intent = "CHAT",
+            reply = if (order.isEmpty())
+                "Hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan en az birini eklemen lazım."
+            else
+                "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
+        )
 
-        history.add("user" to userInput)
-        history.add("model" to result.reply)
-        while (history.size > 12) history.removeAt(0)
-        return result
+        // Failure replies ("anahtar girilmemiş", rate limit…) aren't real conversation — don't store them.
+        if (!IntentSchema.isFailureReply(finalResult)) recordTurn(context, speakerId, userInput, finalResult.reply)
+        return finalResult
     }
 
-    /** File analysis / content generation. Gemini first, Groq as backup. */
-    suspend fun analyzeText(context: Context, prompt: String): String {
-        val providers = order(context, Provider.GEMINI, Provider.GROQ)
-        if (providers.isEmpty()) return NO_KEY_MESSAGE
-        return try {
-            firstSuccess(providers) { p ->
-                when (p) {
-                    Provider.GEMINI -> GeminiClient.analyzeText(context, prompt)
-                    Provider.GROQ -> GroqClient.analyzeText(context, prompt)
-                }
-            }
-        } catch (e: AiException) {
-            IntentSchema.friendlyErrorMessage(e.code, "Yapay zeka")
+    private fun loadHistory(context: Context, personId: String?): List<Pair<String, String>> =
+        if (personId == null) guestHistory.toList() else PeopleStore.getHistory(context, personId)
+
+    private fun recordTurn(context: Context, personId: String?, userText: String, reply: String) {
+        if (personId == null) {
+            guestHistory.add("user" to userText)
+            guestHistory.add("model" to reply)
+            while (guestHistory.size > 12) guestHistory.removeAt(0)
+        } else {
+            PeopleStore.appendHistory(context, personId, "user", userText)
+            PeopleStore.appendHistory(context, personId, "model", reply)
+            maybeUpdatePersonality(context, personId)
         }
     }
 
-    /** Screen / image questions. Gemini first, Groq vision as backup. */
-    suspend fun analyzeImage(context: Context, prompt: String, imageBase64: String): String {
-        val providers = order(context, Provider.GEMINI, Provider.GROQ)
-        if (providers.isEmpty()) return NO_KEY_MESSAGE
-        return try {
-            firstSuccess(providers) { p ->
-                when (p) {
-                    Provider.GEMINI -> GeminiClient.analyzeImage(context, prompt, imageBase64)
-                    Provider.GROQ -> GroqClient.analyzeImage(context, prompt, imageBase64)
+    /**
+     * Every few turns, asks the AI to (re)write a short profile of how this person talks and what
+     * they care about, based ONLY on their own conversations with Jarvis. The result shows up
+     * editable in Settings; if the person's "otomatik güncelle" switch is off this never runs.
+     * The existing profile (including anything the user typed by hand) is passed in so it's kept.
+     */
+    private fun maybeUpdatePersonality(context: Context, personId: String) {
+        val person = PeopleStore.getPerson(context, personId) ?: return
+        val turns = PeopleStore.incrementTurns(context, personId)
+        if (!person.autoPersonality || turns < PROFILE_EVERY_TURNS) return
+        if (!profileUpdating.add(personId)) return
+
+        val appContext = context.applicationContext
+        backgroundScope.launch {
+            try {
+                val convo = PeopleStore.getHistory(appContext, personId).takeLast(20)
+                    .joinToString("\n") { (role, text) -> (if (role == "user") person.name else "Jarvis") + ": " + text }
+                val prompt = "Aşağıda ${person.name} adlı kişinin sesli asistanla yaptığı son konuşmalar var.\n" +
+                    "Mevcut profil: \"${person.personality.ifBlank { "(henüz yok)" }}\"\n\n" +
+                    "Bu konuşmalara dayanarak ${person.name} kişisinin nasıl biri olduğunu 3-4 cümleyle, Türkçe özetle: " +
+                    "iletişim tarzı (resmi/samimi, kısa/uzun cevap tercihi), ilgi alanları, neyi sevip neyi sevmediği, genel ruh hali. " +
+                    "Mevcut profildeki bilgileri (özellikle kullanıcının elle yazdığı kısımları) koru, yeni bilgilerle güncelle. " +
+                    "Sadece konuşmalardan çıkarabildiklerini yaz, tahmin yürütme; sağlık, din, cinsel yönelim, siyasi görüş gibi hassas konularda çıkarım yapma. " +
+                    "Sadece profil metnini yaz, başka açıklama ekleme.\n\n--- KONUŞMALAR ---\n$convo"
+                val profile = analyzeTextOrNull(appContext, prompt)?.trim()
+                if (!profile.isNullOrBlank()) {
+                    PeopleStore.setPersonality(appContext, personId, profile.take(700))
+                    PeopleStore.resetTurns(appContext, personId)
                 }
+            } catch (e: Exception) {
+                // sessizce vazgeç; bir sonraki turda yeniden denenir
+            } finally {
+                profileUpdating.remove(personId)
             }
-        } catch (e: AiException) {
-            IntentSchema.friendlyErrorMessage(e.code, "Yapay zeka")
         }
+    }
+
+    private suspend fun callClassify(
+        context: Context, provider: String, userInput: String, history: List<Pair<String, String>>
+    ): JarvisIntent = when (provider) {
+        "gemini" -> GeminiClient.classify(context, userInput, history)
+        "groq" -> GroqClient.classify(context, userInput, history)
+        "openrouter" -> OpenAiCompatibleClient.classify(
+            OPENROUTER_BASE, PreferencesManager.getOpenRouterApiKey(context), OPENROUTER_MODEL,
+            "OpenRouter", IntentSchema.buildSystemPrompt(context), userInput, history
+        )
+        "mistral" -> OpenAiCompatibleClient.classify(
+            MISTRAL_BASE, PreferencesManager.getMistralApiKey(context), MISTRAL_MODEL,
+            "Mistral", IntentSchema.buildSystemPrompt(context), userInput, history
+        )
+        "cerebras" -> OpenAiCompatibleClient.classify(
+            CEREBRAS_BASE, PreferencesManager.getCerebrasApiKey(context), CEREBRAS_SIMPLE_MODEL,
+            "Cerebras", IntentSchema.buildSystemPrompt(context), userInput, history
+        )
+        else -> JarvisIntent(intent = "CHAT", reply = "Bilinmeyen sağlayıcı.")
+    }
+
+    // ---------- Free-form text reasoning (file analysis, file creation) ----------
+
+    /** Same provider fallback as [analyzeTextSmart], but returns null instead of an error sentence. */
+    suspend fun analyzeTextOrNull(context: Context, prompt: String): String? {
+        for (provider in smartTierOrder.filter { hasKey(context, it) }) {
+            val attempt = callAnalyzeText(context, provider, prompt)
+            if (!IntentSchema.isErrorReply(attempt)) return attempt
+        }
+        return null
+    }
+
+    suspend fun analyzeTextSmart(context: Context, prompt: String): String {
+        if (smartTierOrder.none { hasKey(context, it) })
+            return "Hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan en az birini eklemen lazım."
+        return analyzeTextOrNull(context, prompt)
+            ?: "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
+    }
+
+    private suspend fun callAnalyzeText(context: Context, provider: String, prompt: String): String = when (provider) {
+        "gemini" -> GeminiClient.analyzeText(context, prompt)
+        "openrouter" -> OpenAiCompatibleClient.analyzeText(
+            OPENROUTER_BASE, PreferencesManager.getOpenRouterApiKey(context), OPENROUTER_MODEL, "OpenRouter", prompt
+        )
+        "groq" -> OpenAiCompatibleClient.analyzeText(
+            GROQ_BASE, PreferencesManager.getGroqApiKey(context), GROQ_MODEL, "Groq", prompt
+        )
+        "mistral" -> OpenAiCompatibleClient.analyzeText(
+            MISTRAL_BASE, PreferencesManager.getMistralApiKey(context), MISTRAL_MODEL, "Mistral", prompt
+        )
+        "cerebras" -> OpenAiCompatibleClient.analyzeText(
+            CEREBRAS_BASE, PreferencesManager.getCerebrasApiKey(context), CEREBRAS_SMART_MODEL, "Cerebras", prompt
+        )
+        else -> IntentSchema.markError("Bilinmeyen sağlayıcı.")
+    }
+
+    // ---------- Vision (screen understanding, image file analysis) ----------
+
+    suspend fun analyzeVision(context: Context, prompt: String, imageBase64: String): String {
+        val order = visionTierOrder.filter { hasKey(context, it) }
+        if (order.isEmpty())
+            return "Görsel analiz için yapılandırılmış bir sağlayıcı yok — Ayarlar'dan Gemini, OpenRouter ya da Mistral anahtarı ekleyebilirsin."
+        for (provider in order) {
+            val attempt = callAnalyzeImage(context, provider, prompt, imageBase64)
+            if (!IntentSchema.isErrorReply(attempt)) return attempt
+        }
+        return "Şu an hiçbir görsel-destekli sağlayıcıya ulaşamadım, biraz sonra tekrar dener misin?"
+    }
+
+    private suspend fun callAnalyzeImage(context: Context, provider: String, prompt: String, imageBase64: String): String = when (provider) {
+        "gemini" -> GeminiClient.analyzeImage(context, prompt, imageBase64)
+        "openrouter" -> OpenAiCompatibleClient.analyzeImage(
+            OPENROUTER_BASE, PreferencesManager.getOpenRouterApiKey(context), OPENROUTER_MODEL, "OpenRouter", prompt, imageBase64
+        )
+        "mistral" -> OpenAiCompatibleClient.analyzeImage(
+            MISTRAL_BASE, PreferencesManager.getMistralApiKey(context), MISTRAL_MODEL, "Mistral", prompt, imageBase64
+        )
+        else -> IntentSchema.markError("Bilinmeyen sağlayıcı.")
     }
 
     fun resetConversation() {
-        history.clear()
+        guestHistory.clear()
     }
 
-    /** Read-only copy of the recent conversation turns, for features like exporting the chat. */
-    fun getHistorySnapshot(): List<Pair<String, String>> = history.toList()
+    /** Read-only copy of the current speaker's recent conversation turns, for exporting the chat. */
+    fun getHistorySnapshot(context: Context): List<Pair<String, String>> =
+        loadHistory(context, SpeakerContext.currentId(context))
 }

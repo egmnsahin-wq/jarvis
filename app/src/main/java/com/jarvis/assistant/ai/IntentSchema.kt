@@ -1,7 +1,9 @@
 package com.jarvis.assistant.ai
 
 import android.content.Context
+import com.jarvis.assistant.data.PeopleStore
 import com.jarvis.assistant.data.PreferencesManager
+import com.jarvis.assistant.speaker.SpeakerContext
 import org.json.JSONObject
 
 /** Structured result of asking an AI backend to understand a free-form spoken sentence. */
@@ -28,6 +30,11 @@ data class JarvisIntent(
     val wifiSsid: String? = null,
     val pcApp: String? = null,
     val pcUrl: String? = null,
+    val translateTo: String? = null,
+    val eventTitle: String? = null,
+    val eventDaysFromNow: Int? = null,
+    val prefKey: String? = null,
+    val prefValue: String? = null,
     val reply: String
 )
 
@@ -49,7 +56,23 @@ object IntentSchema {
                 "targetPhone alanına SADECE bu listedeki ismi harfi harfine aynen yaz (büyük/küçük harf de dahil), " +
                 "kendi uydurduğun bir isim yazma. Kullanıcının söylediği isim bu listedekilerden birine " +
                 "en yakınsa o listedeki ismi kullan; hiçbirine benzemiyorsa targetPhone'u null bırak."
+        val speaker = SpeakerContext.currentId(context)?.let { PeopleStore.getPerson(context, it) }
+        val speakerLine = if (speaker == null)
+            "Şu an seninle konuşan kişiyi tanımıyorsun (misafir); ona genel, nötr bir üslupla hitap et."
+        else buildString {
+            append("Şu an seninle konuşan kişi: ${speaker.name}. Ona zaman zaman, doğal şekilde ismiyle hitap et (her cümlede değil). ")
+            if (speaker.personality.isNotBlank())
+                append("Bu kişinin profili: ${speaker.personality.replace("\n", " ")} Cevaplarının tonunu ve üslubunu bu profile göre ayarla. ")
+            append("Başka kişilere ait bilgileri ya da konuşmaları ona anlatma.")
+        }
         val memories = PreferencesManager.getMemories(context)
+        val preferences = PreferencesManager.getPreferences(context)
+        val preferencesLine = if (preferences.isEmpty())
+            "Şu an kayıtlı bir çalışma tercihi yok."
+        else
+            "Kayıtlı çalışma tercihleri: ${preferences.entries.joinToString(", ") { "${it.key}=${it.value}" }}. " +
+                "İlgili komutlarda bu tercihlere göre davran (örn. whatsapp_kanal=web ise WhatsApp " +
+                "komutlarını hep web üzerinden yapılacakmış gibi değerlendir)."
         val memoryLine = if (memories.isEmpty())
             "Kullanıcı hakkında henüz kalıcı olarak hatırladığın bir şey yok."
         else
@@ -60,7 +83,7 @@ object IntentSchema {
             Kullanıcının söylediği Türkçe cümleyi analiz et ve SADECE aşağıdaki JSON şemasında,
             başka hiçbir açıklama, markdown ya da kod bloğu olmadan, saf JSON olarak cevap ver:
 
-            {"intent":"<TIME|WEATHER|FLASHLIGHT_ON|FLASHLIGHT_OFF|VOLUME_UP|VOLUME_DOWN|SILENT_ON|SILENT_OFF|BRIGHTNESS_UP|BRIGHTNESS_DOWN|BATTERY|SEARCH_GOOGLE|SEARCH_YOUTUBE|PLAY_SONG|NOTE_ADD|NOTES_READ|NOTES_CLEAR|REMINDER|ALARM|TIMER|CALL|SMS|WHATSAPP|OPEN_APP|SMART_HOME_ON|SMART_HOME_OFF|TV_OPEN_APP|TV_OPEN_URL|TV_POWER_OFF|TV_VOLUME_UP|TV_VOLUME_DOWN|TV_SET_VOLUME|TV_MUTE|TV_UNMUTE|REMOTE_PLAY_SONG|REMOTE_SEARCH_GOOGLE|REMOTE_SEARCH_YOUTUBE|REMOTE_SET_ALARM|REMOTE_REMINDER|REMOTE_CALL|REMOTE_SMS|REMOTE_WHATSAPP|REMOTE_OPEN_APP|REMOTE_FLASHLIGHT_ON|REMOTE_FLASHLIGHT_OFF|REMOTE_BATTERY|REMOTE_FIND_PHONE|REMOTE_NOTIFY|MEMORY_SAVE|MEMORY_READ|MEMORY_CLEAR|BRIGHTNESS_SET|WIFI_SETTINGS|BLUETOOTH_SETTINGS|FIND_MY_PHONE|ALARM_LIST|MISSED_CALLS|REMOTE_BATTERY_ALL|TODO_ADD|TODO_DONE|TODO_LIST|TODO_CLEAR_DONE|ALIAS_SET|TEMPLATE_SET|TEMPLATE_SEND|CALCULATE|CURRENCY|NEWS|DAILY_SUMMARY|CONVERSATION_EXPORT|HOME_WIFI_SET|ARRIVAL_REMINDER|PC_OPEN_APP|PC_OPEN_URL|PC_SHUTDOWN|PC_RESTART|PC_SLEEP|PC_LOCK|PC_VOLUME_UP|PC_VOLUME_DOWN|PC_MUTE|PC_MEDIA_PLAY_PAUSE|PC_MEDIA_NEXT|PC_MEDIA_PREV|FILE_ANALYZE|FILE_ANALYZE_TO_FILE|CREATE_FILE|SCREEN_ASK|CHAT>",
+            {"intent":"<TIME|WEATHER|FLASHLIGHT_ON|FLASHLIGHT_OFF|VOLUME_UP|VOLUME_DOWN|SILENT_ON|SILENT_OFF|BRIGHTNESS_UP|BRIGHTNESS_DOWN|BATTERY|SEARCH_GOOGLE|SEARCH_YOUTUBE|PLAY_SONG|NOTE_ADD|NOTES_READ|NOTES_CLEAR|REMINDER|ALARM|TIMER|CALL|SMS|WHATSAPP|OPEN_APP|SMART_HOME_ON|SMART_HOME_OFF|TV_OPEN_APP|TV_OPEN_URL|TV_POWER_OFF|TV_VOLUME_UP|TV_VOLUME_DOWN|TV_SET_VOLUME|TV_MUTE|TV_UNMUTE|TV_SEARCH_YOUTUBE|REMOTE_PLAY_SONG|REMOTE_SEARCH_GOOGLE|REMOTE_SEARCH_YOUTUBE|REMOTE_SET_ALARM|REMOTE_REMINDER|REMOTE_CALL|REMOTE_SMS|REMOTE_WHATSAPP|REMOTE_OPEN_APP|REMOTE_FLASHLIGHT_ON|REMOTE_FLASHLIGHT_OFF|REMOTE_BATTERY|REMOTE_FIND_PHONE|REMOTE_NOTIFY|MEMORY_SAVE|MEMORY_READ|MEMORY_CLEAR|BRIGHTNESS_SET|WIFI_SETTINGS|BLUETOOTH_SETTINGS|FIND_MY_PHONE|ALARM_LIST|MISSED_CALLS|REMOTE_BATTERY_ALL|TODO_ADD|TODO_DONE|TODO_LIST|TODO_CLEAR_DONE|ALIAS_SET|TEMPLATE_SET|TEMPLATE_SEND|CALCULATE|CURRENCY|NEWS|DAILY_SUMMARY|CONVERSATION_EXPORT|HOME_WIFI_SET|ARRIVAL_REMINDER|PC_OPEN_APP|PC_OPEN_URL|PC_SHUTDOWN|PC_RESTART|PC_SLEEP|PC_LOCK|PC_VOLUME_UP|PC_VOLUME_DOWN|PC_MUTE|PC_MEDIA_PLAY_PAUSE|PC_MEDIA_NEXT|PC_MEDIA_PREV|FILE_ANALYZE|FILE_ANALYZE_TO_FILE|CREATE_FILE|SCREEN_ASK|TRANSLATE|CALENDAR_ADD_EVENT|CALENDAR_TODAY|LEAVE_REMINDER|PREFERENCE_SET|CHAT>",
              "query":"<arama/şarkı metni varsa, yoksa null>",
              "note":"<not edilecek metin varsa, yoksa null>",
              "minutes":<hatırlatıcı/sayaç için dakika sayısı varsa, yoksa null>,
@@ -82,6 +105,11 @@ object IntentSchema {
              "wifiSsid":"<ev Wi-Fi ağının adı belirtildiyse, yoksa null>",
              "pcApp":"<BİLGİSAYARDA açılacak uygulama adı varsa, yoksa null>",
              "pcUrl":"<bilgisayarın tarayıcısında açılacak URL varsa, yoksa null>",
+             "translateTo":"<çeviri istenen hedef dil varsa (örn. İngilizce), yoksa null>",
+             "eventTitle":"<takvime eklenecek etkinlik/randevu adı varsa, yoksa null>",
+             "eventDaysFromNow":<etkinlik bugünse 0, yarınsa 1, vb. gün farkı varsa yaz, yoksa null>,
+             "prefKey":"<kaydedilecek tercihin anahtarı varsa (örn. \"whatsapp_kanal\"), yoksa null>",
+             "prefValue":"<o tercihin değeri varsa (örn. \"web\"), yoksa null>",
              "reply":"<kullanıcıya söyleyeceğin KISA (en fazla 2 cümle), doğal, sesli okunacak Türkçe cevap veya onay — HER ZAMAN doldur>"}
 
             Kullanıcı bir eylem istemiyorsa (sohbet, soru, bilgi isteği) intent olarak "CHAT" kullan
@@ -94,7 +122,8 @@ object IntentSchema {
             "X aç" ise) bu telefonda açılacağı için intent OPEN_APP ve app alanını doldur.
             "Televizyonu kapat" -> TV_POWER_OFF. "Televizyonun sesini aç/kıs" ->
             TV_VOLUME_UP/TV_VOLUME_DOWN. "Televizyonu sessize al" -> TV_MUTE, "televizyonun
-            sesini geri aç" -> TV_UNMUTE.
+            sesini geri aç" -> TV_UNMUTE. "Televizyonda youtube'da [X] ara" -> TV_SEARCH_YOUTUBE,
+            query alanına arama terimini yaz.
 
             Bilgisayar komutları: "bilgisayarı kapat" -> PC_SHUTDOWN, "yeniden başlat" ->
             PC_RESTART, "uyku moduna al" -> PC_SLEEP, "kilitle" -> PC_LOCK, "bilgisayarın sesini
@@ -111,6 +140,15 @@ object IntentSchema {
               note alanına ne yazılacağını/oluşturulacağını yaz.
             - "ekranımda ne var", "bu ekranda ne yazıyor", "şunu ekrana bakarak cevapla: [soru]"
               -> SCREEN_ASK, query alanına soru varsa yaz (yoksa null, genel açıklama yapılır).
+            - "[metin] ingilizceye çevir", "[kelime] ispanyolca ne demek" -> TRANSLATE, query
+              alanına çevrilecek metni, translateTo alanına hedef dili yaz.
+            - "yarın saat 3'te diş randevusu var, takvime ekle", "cuma günü toplantı ekle" ->
+              CALENDAR_ADD_EVENT, eventTitle, eventDaysFromNow (bugün=0, yarın=1, vb.), hour,
+              minute alanlarını doldur (saat belirtilmemişse hour/minute null bırak).
+            - "bugün takvimimde ne var", "ajandamda bugün ne var" -> CALENDAR_TODAY.
+            - "evden çıkınca [iş] hatırlat", "dışarı çıkarken beni uyar: [iş]" -> LEAVE_REMINDER,
+              message alanına hatırlatılacak işi yaz (ev Wi-Fi'sı HOME_WIFI_SET ile ayarlanmış
+              olmalı, ayarlanmadıysa reply'da bunu hatırlat).
 
             ÖNEMLİ — OPEN_APP sadece kullanıcı SADECE BİR UYGULAMA ADI söylediğinde kullanılır
             ("youtube aç", "instagram'ı aç", "spotify'ı başlat" gibi — başka hiçbir içerik/şarkı/
@@ -137,6 +175,15 @@ object IntentSchema {
             kullanma, mutlaka REMOTE_ karşılığını seç.
 
             $phoneListLine
+
+            $speakerLine
+
+            $preferencesLine
+
+            Kullanıcı bir komutun BUNDAN SONRA hep belirli bir şekilde yapılmasını istediğinde
+            ("whatsapp mesajımı whatsapp'tan değil web whatsapp'tan gönder", "bundan sonra hep
+            böyle yap" gibi) intent PREFERENCE_SET kullan ve kalıcı bir kural olarak kaydet.
+            Bilinen tercih anahtarı: "whatsapp_kanal" (değeri "web" ya da "app" olabilir).
 
             $memoryLine
 
@@ -258,6 +305,11 @@ object IntentSchema {
                 wifiSsid = str("wifiSsid"),
                 pcApp = str("pcApp"),
                 pcUrl = str("pcUrl"),
+                translateTo = str("translateTo"),
+                eventTitle = str("eventTitle"),
+                eventDaysFromNow = int("eventDaysFromNow"),
+                prefKey = str("prefKey"),
+                prefValue = str("prefValue"),
                 reply = reply
             )
         } catch (e: Exception) {
@@ -269,7 +321,6 @@ object IntentSchema {
     private const val RATE_LIMIT_MARKER = "ücretsiz kullanım limitine takıldık"
 
     fun friendlyErrorMessage(code: Int, providerName: String): String = when (code) {
-        -1 -> "İnternet bağlantısı yok gibi görünüyor, bağlantını kontrol eder misin?"
         429 -> "$providerName için şu an $RATE_LIMIT_MARKER. Birkaç dakika sonra tekrar dener misin?"
         401, 403 -> "$providerName API anahtarı geçersiz görünüyor. Ayarlar sekmesinden kontrol et."
         404 -> "$providerName için kullanılan model artık geçerli değil, güncellenmesi gerekiyor."
@@ -279,4 +330,25 @@ object IntentSchema {
 
     fun isRateLimited(intent: JarvisIntent): Boolean =
         intent.intent == "CHAT" && intent.reply.contains(RATE_LIMIT_MARKER)
+
+    // Any provider failure — rate limit, bad/missing key, deprecated model, server error, or a
+    // connection exception. Used by AssistantAi's fallback loop so EVERY kind of failure (not
+    // just 429s) moves on to the next configured provider instead of being returned as if it
+    // were a real answer.
+    private val FAILURE_MARKERS = listOf(
+        RATE_LIMIT_MARKER, "API anahtarı geçersiz", "API anahtarı girilmemiş",
+        "kullanılan model artık geçerli değil", "sunucularında geçici bir sorun",
+        "isteği başarısız oldu", "Bağlantı hatası", "Bir cevap alamadım"
+    )
+
+    fun isFailureReply(intent: JarvisIntent): Boolean =
+        intent.intent == "CHAT" && FAILURE_MARKERS.any { intent.reply.contains(it) }
+
+    // --- Shared error marker for free-form (non-JSON) calls: analyzeText/analyzeImage across
+    // every provider use this so AssistantAi's router can tell "this failed, try the next
+    // provider" apart from "this is a real answer that happens to start oddly". ---
+    private const val ERROR_MARKER = "\u0000ERR\u0000"
+    fun markError(message: String): String = ERROR_MARKER + message
+    fun isErrorReply(raw: String): Boolean = raw.startsWith(ERROR_MARKER)
+    fun stripErrorMarker(raw: String): String = raw.removePrefix(ERROR_MARKER)
 }

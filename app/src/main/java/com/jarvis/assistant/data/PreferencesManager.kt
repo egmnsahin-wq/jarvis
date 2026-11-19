@@ -23,6 +23,9 @@ object PreferencesManager {
     private const val REMOTE_PHONE_SLOTS = 3
     private const val KEY_AI_PROVIDER = "ai_provider"
     private const val KEY_GROQ_API_KEY = "groq_api_key"
+    private const val KEY_OPENROUTER_API_KEY = "openrouter_api_key"
+    private const val KEY_MISTRAL_API_KEY = "mistral_api_key"
+    private const val KEY_CEREBRAS_API_KEY = "cerebras_api_key"
     private const val KEY_YOUTUBE_API_KEY = "youtube_api_key"
     private const val KEY_SPOTIFY_CLIENT_ID = "spotify_client_id"
     private const val KEY_SPOTIFY_CLIENT_SECRET = "spotify_client_secret"
@@ -122,7 +125,7 @@ object PreferencesManager {
     }
 
     // --- AI provider ("gemini" or "groq") ---
-    fun getAiProvider(context: Context): String = prefs(context).getString(KEY_AI_PROVIDER, "groq") ?: "groq"
+    fun getAiProvider(context: Context): String = prefs(context).getString(KEY_AI_PROVIDER, "gemini") ?: "gemini"
 
     fun setAiProvider(context: Context, provider: String) {
         prefs(context).edit().putString(KEY_AI_PROVIDER, provider).apply()
@@ -132,6 +135,21 @@ object PreferencesManager {
 
     fun setGroqApiKey(context: Context, key: String) {
         prefs(context).edit().putString(KEY_GROQ_API_KEY, key.trim()).apply()
+    }
+
+    fun getOpenRouterApiKey(context: Context): String = prefs(context).getString(KEY_OPENROUTER_API_KEY, "") ?: ""
+    fun setOpenRouterApiKey(context: Context, key: String) {
+        prefs(context).edit().putString(KEY_OPENROUTER_API_KEY, key.trim()).apply()
+    }
+
+    fun getMistralApiKey(context: Context): String = prefs(context).getString(KEY_MISTRAL_API_KEY, "") ?: ""
+    fun setMistralApiKey(context: Context, key: String) {
+        prefs(context).edit().putString(KEY_MISTRAL_API_KEY, key.trim()).apply()
+    }
+
+    fun getCerebrasApiKey(context: Context): String = prefs(context).getString(KEY_CEREBRAS_API_KEY, "") ?: ""
+    fun setCerebrasApiKey(context: Context, key: String) {
+        prefs(context).edit().putString(KEY_CEREBRAS_API_KEY, key.trim()).apply()
     }
 
     // --- Song-playback credentials (optional — without these, playSong falls back to just
@@ -152,9 +170,15 @@ object PreferencesManager {
     }
 
     // --- Long-term memory: facts the user explicitly asked Jarvis to remember, persisted
-    // across app restarts (unlike the in-memory conversation history AssistantAi keeps). ---
+    // across app restarts. Kept SEPARATELY per recognized person (guest/unknown uses the shared
+    // list), so one person's "bunu hatırla" never leaks into someone else's conversations. ---
+    private fun memoryKey(context: Context): String {
+        val id = com.jarvis.assistant.speaker.SpeakerContext.currentId(context)
+        return if (id == null) KEY_MEMORY_FACTS else "${KEY_MEMORY_FACTS}_$id"
+    }
+
     fun getMemories(context: Context): List<String> {
-        val raw = prefs(context).getString(KEY_MEMORY_FACTS, "") ?: ""
+        val raw = prefs(context).getString(memoryKey(context), "") ?: ""
         return if (raw.isBlank()) emptyList() else raw.split(MEMORY_SEPARATOR).filter { it.isNotBlank() }
     }
 
@@ -162,11 +186,15 @@ object PreferencesManager {
         val trimmed = fact.trim()
         if (trimmed.isBlank()) return
         val updated = (getMemories(context) + trimmed).takeLast(50) // keep it bounded
-        prefs(context).edit().putString(KEY_MEMORY_FACTS, updated.joinToString(MEMORY_SEPARATOR)).apply()
+        prefs(context).edit().putString(memoryKey(context), updated.joinToString(MEMORY_SEPARATOR)).apply()
     }
 
     fun clearMemories(context: Context) {
-        prefs(context).edit().remove(KEY_MEMORY_FACTS).apply()
+        prefs(context).edit().remove(memoryKey(context)).apply()
+    }
+
+    fun clearMemoriesForPerson(context: Context, personId: String) {
+        prefs(context).edit().remove("${KEY_MEMORY_FACTS}_$personId").apply()
     }
 
     // --- Routines / scenes ("çalışma ortamını ayarla" -> play a song + open apps) ---
@@ -307,4 +335,45 @@ object PreferencesManager {
     fun clearArrivalReminders(context: Context) {
         prefs(context).edit().remove(KEY_ARRIVAL_REMINDERS).apply()
     }
+
+    // --- Leave-home reminders: fire when the phone DISCONNECTS from the home Wi-Fi ---
+    private const val KEY_LEAVE_REMINDERS = "leave_reminders"
+
+    fun getLeaveReminders(context: Context): List<String> {
+        val raw = prefs(context).getString(KEY_LEAVE_REMINDERS, "") ?: ""
+        return if (raw.isBlank()) emptyList() else raw.split(MEMORY_SEPARATOR).filter { it.isNotBlank() }
+    }
+
+    fun addLeaveReminder(context: Context, message: String) {
+        val updated = getLeaveReminders(context) + message.trim()
+        prefs(context).edit().putString(KEY_LEAVE_REMINDERS, updated.joinToString(MEMORY_SEPARATOR)).apply()
+    }
+
+    fun clearLeaveReminders(context: Context) {
+        prefs(context).edit().remove(KEY_LEAVE_REMINDERS).apply()
+    }
+
+    // --- Operational preferences: "WhatsApp mesajını web'den gönder" gibi, bir komutun NASIL
+    // çalışacağını değiştiren kalıcı kurallar (bilgi hatırlama ile aynı şey değil). ---
+    private const val KEY_PREFERENCES = "operational_preferences_json"
+
+    fun getPreferences(context: Context): Map<String, String> {
+        val raw = prefs(context).getString(KEY_PREFERENCES, "") ?: ""
+        if (raw.isBlank()) return emptyMap()
+        return try {
+            val obj = JSONObject(raw)
+            obj.keys().asSequence().associateWith { obj.optString(it) }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    fun setPreference(context: Context, key: String, value: String) {
+        val current = getPreferences(context).toMutableMap()
+        current[key.trim().lowercase(Locale("tr"))] = value.trim()
+        prefs(context).edit().putString(KEY_PREFERENCES, JSONObject(current as Map<String, Any?>).toString()).apply()
+    }
+
+    fun getPreference(context: Context, key: String): String? =
+        getPreferences(context)[key.trim().lowercase(Locale("tr"))]
 }

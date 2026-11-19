@@ -10,10 +10,12 @@ import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
 
 /**
- * Only job: take a screenshot when asked, so ScreenUnderstandingController can send it to the AI
- * for "ekranımda ne var" style questions. Does not read window content and does not tap anything.
+ * Only job: take a screenshot when asked, so [com.jarvis.assistant.commands.ScreenUnderstandingController]
+ * can send it to Gemini for "ekranımda ne var" style questions. Does not read window content,
+ * does not simulate taps, does not automate anything else.
  *
- * The user enables this once from Settings > Accessibility > Jarvis.
+ * The user enables this once from Settings > Accessibility > Jarvis (Settings.openAccessibility()
+ * jumps straight there). Nothing works here until they do.
  */
 class JarvisAccessibilityService : AccessibilityService() {
 
@@ -33,9 +35,6 @@ class JarvisAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var instance: JarvisAccessibilityService? = null
 
-        // Long side is shrunk to this: much faster upload, far fewer tokens, plenty to read the screen.
-        private const val MAX_SIDE_PX = 1280
-
         fun isEnabled(): Boolean = instance != null
 
         /** Returns a base64 JPEG of the current screen, or null if unavailable/unsupported/denied. */
@@ -49,38 +48,21 @@ class JarvisAccessibilityService : AccessibilityService() {
                     service.mainExecutor,
                     object : TakeScreenshotCallback {
                         override fun onSuccess(result: android.accessibilityservice.AccessibilityService.ScreenshotResult) {
-                            var buffer: HardwareBuffer? = null
                             try {
-                                buffer = result.hardwareBuffer
-                                val hw = Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
-                                if (hw == null) {
+                                val hardwareBuffer: HardwareBuffer = result.hardwareBuffer
+                                val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, result.colorSpace)
+                                hardwareBuffer.close()
+                                if (bitmap == null) {
                                     if (cont.isActive) cont.resume(null)
                                     return
                                 }
-                                // BUG FIX: copy FIRST, close the buffer AFTER (the old code closed the
-                                // buffer before copying, so the copy failed and the screenshot was lost).
-                                val soft = hw.copy(Bitmap.Config.ARGB_8888, false)
-                                hw.recycle()
-                                if (soft == null) {
-                                    if (cont.isActive) cont.resume(null)
-                                    return
-                                }
-                                val longSide = maxOf(soft.width, soft.height)
-                                val scaled = if (longSide > MAX_SIDE_PX) {
-                                    val f = MAX_SIDE_PX.toFloat() / longSide
-                                    Bitmap.createScaledBitmap(
-                                        soft, (soft.width * f).toInt().coerceAtLeast(1),
-                                        (soft.height * f).toInt().coerceAtLeast(1), true
-                                    )
-                                } else soft
+                                val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
                                 val out = ByteArrayOutputStream()
-                                scaled.compress(Bitmap.CompressFormat.JPEG, 80, out)
+                                softwareBitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
                                 val base64 = android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
                                 if (cont.isActive) cont.resume(base64)
                             } catch (e: Exception) {
                                 if (cont.isActive) cont.resume(null)
-                            } finally {
-                                try { buffer?.close() } catch (_: Exception) {}
                             }
                         }
 

@@ -55,6 +55,9 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     var apiKey by remember { mutableStateOf(PreferencesManager.getApiKey(context)) }
     var groqApiKey by remember { mutableStateOf(PreferencesManager.getGroqApiKey(context)) }
+    var openRouterApiKey by remember { mutableStateOf(PreferencesManager.getOpenRouterApiKey(context)) }
+    var mistralApiKey by remember { mutableStateOf(PreferencesManager.getMistralApiKey(context)) }
+    var cerebrasApiKey by remember { mutableStateOf(PreferencesManager.getCerebrasApiKey(context)) }
     var youtubeApiKey by remember { mutableStateOf(PreferencesManager.getYoutubeApiKey(context)) }
     var spotifyClientId by remember { mutableStateOf(PreferencesManager.getSpotifyClientId(context)) }
     var spotifyClientSecret by remember { mutableStateOf(PreferencesManager.getSpotifyClientSecret(context)) }
@@ -164,7 +167,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         )
 
         Text(
-            text = "Groq API Anahtarı",
+            text = "Groq API Anahtarı (alternatif, opsiyonel)",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
@@ -180,37 +183,123 @@ fun SettingsScreen(onBack: () -> Unit) {
             placeholder = { Text("gsk_...") }
         )
         Text(
-            text = "console.groq.com/keys adresinden ücretsiz alabilirsin. Normal sohbet için önerilen ana yapay zeka.",
+            text = "console.groq.com/keys adresinden ücretsiz alabilirsin.",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
         )
 
         Text(
-            text = "Sohbet için öncelikli yapay zeka",
+            text = "OpenRouter API Anahtarı (opsiyonel)",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        OutlinedTextField(
+            value = openRouterApiKey,
+            onValueChange = { openRouterApiKey = it },
+            colors = fieldColors,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            placeholder = { Text("sk-or-...") }
+        )
+        Text(
+            text = "openrouter.ai/keys adresinden ücretsiz alabilirsin — birçok ücretsiz modele (görsel analiz dahil) tek anahtarla erişim sağlar.",
+            style = MaterialTheme.typography.labelSmall,
+            color = JarvisTextSecondary,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+
+        Text(
+            text = "Mistral API Anahtarı (opsiyonel)",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        OutlinedTextField(
+            value = mistralApiKey,
+            onValueChange = { mistralApiKey = it },
+            colors = fieldColors,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            placeholder = { Text("mistral anahtarı") }
+        )
+        Text(
+            text = "console.mistral.ai adresinden ücretsiz alabilirsin — görsel analizi de destekler.",
+            style = MaterialTheme.typography.labelSmall,
+            color = JarvisTextSecondary,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+
+        Text(
+            text = "Cerebras API Anahtarı (opsiyonel)",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        OutlinedTextField(
+            value = cerebrasApiKey,
+            onValueChange = { cerebrasApiKey = it },
+            colors = fieldColors,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            placeholder = { Text("csk-...") }
+        )
+        Text(
+            text = "cloud.cerebras.ai adresinden ücretsiz alabilirsin — çok hızlı, günlük 1 milyon token kotası var.",
+            style = MaterialTheme.typography.labelSmall,
+            color = JarvisTextSecondary,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+
+        Text(
+            text = "Ana Yapay Zeka",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Row {
-            Button(
-                onClick = { aiProvider = "gemini" },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (aiProvider == "gemini") JarvisOrange else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) { Text("Gemini", color = if (aiProvider == "gemini") androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.onSurfaceVariant) }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = { aiProvider = "groq" },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (aiProvider == "groq") JarvisOrange else MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) { Text("Groq", color = if (aiProvider == "groq") androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.onSurfaceVariant) }
+            listOf("gemini" to "Gemini", "groq" to "Groq").forEach { (id, label) ->
+                Button(
+                    onClick = { aiProvider = id },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (aiProvider == id) JarvisOrange else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) { Text(label, color = if (aiProvider == id) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.onSurfaceVariant) }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+        }
+        Spacer(modifier = Modifier.width(4.dp))
+        Row(modifier = Modifier.padding(top = 8.dp)) {
+            listOf("openrouter" to "OpenRouter", "mistral" to "Mistral", "cerebras" to "Cerebras").forEach { (id, label) ->
+                Button(
+                    onClick = { aiProvider = id },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (aiProvider == id) JarvisOrange else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) { Text(label, color = if (aiProvider == id) androidx.compose.ui.graphics.Color.Black else MaterialTheme.colorScheme.onSurfaceVariant) }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
         }
         Text(
-            text = "Normal sorular ve komutlar için önce bu kullanılır. Ekran/dosya analizinde her zaman önce Gemini çalışır. Biri hata verir ya da limite takılırsa (diğerinin anahtarı varsa) otomatik diğerine geçilir.",
+            text = "Hangisini seçersen o birincil olur. Girdiğin HER anahtar aktif olarak kullanılır — biri günlük limitine takılınca Jarvis otomatik olarak sıradaki dolu anahtara geçer (basit komutlarda hızlı sağlayıcılar, dosya/ekran analizi gibi ağır işlerde daha güçlü sağlayıcılar önceliklidir). Ne kadar çok anahtar girersen, gün boyu o kadar az sorun yaşarsın.",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        val configuredCount = remember(groqApiKey, apiKey, openRouterApiKey, mistralApiKey, cerebrasApiKey) {
+            listOf(apiKey, groqApiKey, openRouterApiKey, mistralApiKey, cerebrasApiKey).count { it.isNotBlank() }
+        }
+        Text(
+            text = "Şu an $configuredCount / 5 sağlayıcı yapılandırılmış.",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (configuredCount >= 2) JarvisBlue else JarvisOrange,
             modifier = Modifier.padding(top = 4.dp)
         )
 
@@ -528,12 +617,17 @@ fun SettingsScreen(onBack: () -> Unit) {
             modifier = Modifier.padding(top = 4.dp)
         )
 
+        PeopleSettingsSection(fieldColors)
+
         Button(
             onClick = {
                 PreferencesManager.setAssistantName(context, assistantName.ifBlank { PreferencesManager.DEFAULT_NAME })
                 PreferencesManager.setPersonality(context, personality.ifBlank { PreferencesManager.DEFAULT_PERSONALITY })
                 PreferencesManager.setApiKey(context, apiKey)
                 PreferencesManager.setGroqApiKey(context, groqApiKey)
+                PreferencesManager.setOpenRouterApiKey(context, openRouterApiKey)
+                PreferencesManager.setMistralApiKey(context, mistralApiKey)
+                PreferencesManager.setCerebrasApiKey(context, cerebrasApiKey)
                 PreferencesManager.setAiProvider(context, aiProvider)
                 PreferencesManager.setYoutubeApiKey(context, youtubeApiKey)
                 PreferencesManager.setSpotifyClientId(context, spotifyClientId)
