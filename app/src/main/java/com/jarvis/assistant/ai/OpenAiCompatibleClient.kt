@@ -37,7 +37,7 @@ object OpenAiCompatibleClient {
         }
         val messages = JSONArray().apply {
             put(JSONObject().put("role", "system").put("content", systemPrompt))
-            history.takeLast(6).forEach { (role, text) ->
+            IntentSchema.windowHistory(history).forEach { (role, text) ->
                 put(JSONObject().put("role", if (role == "user") "user" else "assistant").put("content", text))
             }
             put(JSONObject().put("role", "user").put("content", userInput))

@@ -45,7 +45,7 @@ object GeminiClient {
                     put("role", "user")
                     put("parts", JSONArray().put(JSONObject().put("text", IntentSchema.buildSystemPrompt(context))))
                 })
-                history.takeLast(6).forEach { (role, text) ->
+                IntentSchema.windowHistory(history).forEach { (role, text) ->
                     put(JSONObject().apply {
                         put("role", if (role == "user") "user" else "model")
                         put("parts", JSONArray().put(JSONObject().put("text", text)))

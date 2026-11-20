@@ -320,6 +320,27 @@ object IntentSchema {
     /** Distinctive marker text so [isRateLimited] can recognize a 429 regardless of which provider hit it. */
     private const val RATE_LIMIT_MARKER = "ücretsiz kullanım limitine takıldık"
 
+    /**
+     * Yapay zekaya gönderilecek konuşma geçmişi penceresi: son 60 mesaj ve en fazla ~14.000 karakter.
+     * (Eskiden sadece son 6 mesaj gidiyordu, bu yüzden önceki konuşmaları unutuyordu.)
+     */
+    fun windowHistory(history: List<Pair<String, String>>): List<Pair<String, String>> {
+        val picked = ArrayDeque<Pair<String, String>>()
+        var chars = 0
+        for (turn in history.asReversed().take(60)) {
+            chars += turn.second.length
+            if (chars > 14_000 && picked.isNotEmpty()) break
+            picked.addFirst(turn)
+        }
+        return picked.toList()
+    }
+
+    /** Tüm sağlayıcıların günlük/dakikalık ücretsiz limiti dolduğunda kullanıcıya söylenecek cümle. */
+    const val ALL_LIMITS_REACHED_REPLY =
+        "Ücretsiz kullanım limitime takıldım, şimdilik daha fazla düşünemiyorum. Biraz dinlendikten sonra tekrar seninle konuşmak isterim."
+
+    fun isRateLimited(raw: String): Boolean = raw.contains(RATE_LIMIT_MARKER)
+
     fun friendlyErrorMessage(code: Int, providerName: String): String = when (code) {
         429 -> "$providerName için şu an $RATE_LIMIT_MARKER. Birkaç dakika sonra tekrar dener misin?"
         401, 403 -> "$providerName API anahtarı geçersiz görünüyor. Ayarlar sekmesinden kontrol et."
@@ -336,7 +357,7 @@ object IntentSchema {
     // just 429s) moves on to the next configured provider instead of being returned as if it
     // were a real answer.
     private val FAILURE_MARKERS = listOf(
-        RATE_LIMIT_MARKER, "API anahtarı geçersiz", "API anahtarı girilmemiş",
+        RATE_LIMIT_MARKER, "Ücretsiz kullanım limitime takıldım", "API anahtarı geçersiz", "API anahtarı girilmemiş",
         "kullanılan model artık geçerli değil", "sunucularında geçici bir sorun",
         "isteği başarısız oldu", "Bağlantı hatası", "Bir cevap alamadım"
     )

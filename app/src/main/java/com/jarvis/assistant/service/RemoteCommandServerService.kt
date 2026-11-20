@@ -61,8 +61,20 @@ class RemoteCommandServerService : Service() {
             flashlightController = FlashlightController(this)
             systemController = SystemController(this)
 
-            startForeground(NOTIFICATION_ID, buildNotification())
-            server = JarvisHttpServer().also { it.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
+            try {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            } catch (e: Exception) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            try {
+                server = JarvisHttpServer().also { it.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false) }
+            } catch (e: Exception) {
+                // Port meşgul / ağ yok: servis çökmesin, bildirimle belli etsin
+                showNotification("Uzaktan kontrol başlatılamadı (port ${PORT}): ${e.message}")
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
         return START_STICKY
     }

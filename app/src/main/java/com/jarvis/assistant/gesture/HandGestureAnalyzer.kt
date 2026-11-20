@@ -179,14 +179,14 @@ class HandGestureAnalyzer(
         if (now < cooldownUntil) return
 
         // --- Kaydırma: açık el, ~0.45 sn içinde belirgin yatay hareket ---
-        if (open) {
-            val recent = history.filter { it.open && now - it.t <= 450 }
-            if (recent.size >= 3) {
+        if (!pointing) {
+            val recent = history.filter { now - it.t <= 600 }
+            if (recent.size >= 2) {
                 val a = recent.first(); val b = recent.last()
                 val dx = b.cx - a.cx
                 val dy = b.cy - a.cy
                 val dtSec = (b.t - a.t) / 1000f
-                if (dtSec >= 0.12f && abs(dx) >= 0.22f && abs(dy) < abs(dx) * 0.7f && abs(dx) / dtSec >= 0.5f) {
+                if (dtSec >= 0.12f && abs(dx) >= 0.15f && abs(dy) < abs(dx) && abs(dx) / dtSec >= 0.3f) {
                     fire(if (dx < 0) HandGesture.NEXT else HandGesture.PREVIOUS, now)
                     return
                 }

@@ -25,7 +25,7 @@ class TextToSpeechManager(
     init {
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("tr", "TR")
+                if ((tts?.setLanguage(Locale("tr", "TR")) ?: TextToSpeech.LANG_NOT_SUPPORTED) < TextToSpeech.LANG_AVAILABLE) tts?.language = Locale.getDefault()
                 pickBestVoice()
                 ready = true
             }

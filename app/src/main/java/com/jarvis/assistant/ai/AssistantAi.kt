@@ -1,6 +1,7 @@
 package com.jarvis.assistant.ai
 
 import android.content.Context
+import com.jarvis.assistant.data.ConversationStore
 import com.jarvis.assistant.data.PeopleStore
 import com.jarvis.assistant.data.PreferencesManager
 import com.jarvis.assistant.speaker.SpeakerContext
@@ -30,7 +31,7 @@ object AssistantAi {
 
     // Guests (nobody recognized) keep a short in-memory history only; recognized people get a
     // persistent per-person history via PeopleStore.
-    private val guestHistory = mutableListOf<Pair<String, String>>()
+    // Artık diske yazılıyor (ConversationStore): uygulama kapanıp açılsa da hatırlanır.
 
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val profileUpdating = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -45,30 +46,29 @@ object AssistantAi {
     private const val OPENROUTER_BASE = "https://openrouter.ai/api/v1"
     private const val OPENROUTER_MODEL = "openrouter/free"
 
-    // Mistral La Plateforme — free tier, mistral-small-latest supports text + vision.
-    private const val MISTRAL_BASE = "https://api.mistral.ai/v1"
-    private const val MISTRAL_MODEL = "mistral-small-latest"
+    // GitHub Models — her GitHub hesabı için ücretsiz (günlük limitli), OpenAI uyumlu, görsel destekler.
+    private const val GITHUB_BASE = "https://models.github.ai/inference"
+    private const val GITHUB_MODEL = "openai/gpt-4.1-mini"
 
-    // Cerebras — very fast free tier, text only (no vision).
-    private const val CEREBRAS_BASE = "https://api.cerebras.ai/v1"
-    private const val CEREBRAS_SIMPLE_MODEL = "llama3.1-8b"
-    private const val CEREBRAS_SMART_MODEL = "llama-3.3-70b"
+    // NVIDIA NIM — ücretsiz başlangıç kredisi, hızlı, sadece metin.
+    private const val NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
+    private const val NVIDIA_MODEL = "meta/llama-3.3-70b-instruct"
 
-    private val simpleTierOrder = listOf("groq", "cerebras", "mistral", "openrouter", "gemini")
-    private val smartTierOrder = listOf("gemini", "openrouter", "groq", "cerebras", "mistral")
-    private val visionTierOrder = listOf("gemini", "openrouter", "mistral")
+    private val simpleTierOrder = listOf("groq", "github", "nvidia", "openrouter", "gemini")
+    private val smartTierOrder = listOf("gemini", "openrouter", "groq", "github", "nvidia")
+    private val visionTierOrder = listOf("gemini", "openrouter", "github")
 
     private fun hasKey(context: Context, provider: String): Boolean = when (provider) {
         "gemini" -> GeminiClient.hasApiKey(context)
         "groq" -> GroqClient.hasApiKey(context)
         "openrouter" -> PreferencesManager.getOpenRouterApiKey(context).isNotBlank()
-        "mistral" -> PreferencesManager.getMistralApiKey(context).isNotBlank()
-        "cerebras" -> PreferencesManager.getCerebrasApiKey(context).isNotBlank()
+        "github" -> PreferencesManager.getGithubModelsApiKey(context).isNotBlank()
+        "nvidia" -> PreferencesManager.getNvidiaApiKey(context).isNotBlank()
         else -> false
     }
 
     fun configuredProviderCount(context: Context): Int =
-        listOf("gemini", "groq", "openrouter", "mistral", "cerebras").count { hasKey(context, it) }
+        listOf("gemini", "groq", "openrouter", "github", "nvidia").count { hasKey(context, it) }
 
     // ---------- Structured intent classification ----------
 
@@ -84,17 +84,21 @@ object AssistantAi {
         val order = (listOf(primary) + simpleTierOrder).distinct().filter { hasKey(context, it) }
 
         var result: JarvisIntent? = null
+        var rateLimited = false
         for (provider in order) {
             val attempt = callClassify(context, provider, userInput, history)
             if (!IntentSchema.isFailureReply(attempt)) {
                 result = attempt
                 break
             }
+            if (IntentSchema.isRateLimited(attempt.reply)) rateLimited = true
         }
         val finalResult = result ?: JarvisIntent(
             intent = "CHAT",
             reply = if (order.isEmpty())
                 "Hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan en az birini eklemen lazım."
+            else if (rateLimited)
+                IntentSchema.ALL_LIMITS_REACHED_REPLY
             else
                 "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
         )
@@ -105,13 +109,12 @@ object AssistantAi {
     }
 
     private fun loadHistory(context: Context, personId: String?): List<Pair<String, String>> =
-        if (personId == null) guestHistory.toList() else PeopleStore.getHistory(context, personId)
+        if (personId == null) ConversationStore.load(context) else PeopleStore.getHistory(context, personId)
 
     private fun recordTurn(context: Context, personId: String?, userText: String, reply: String) {
         if (personId == null) {
-            guestHistory.add("user" to userText)
-            guestHistory.add("model" to reply)
-            while (guestHistory.size > 12) guestHistory.removeAt(0)
+            ConversationStore.append(context, "user", userText)
+            ConversationStore.append(context, "model", reply)
         } else {
             PeopleStore.appendHistory(context, personId, "user", userText)
             PeopleStore.appendHistory(context, personId, "model", reply)
@@ -165,13 +168,13 @@ object AssistantAi {
             OPENROUTER_BASE, PreferencesManager.getOpenRouterApiKey(context), OPENROUTER_MODEL,
             "OpenRouter", IntentSchema.buildSystemPrompt(context), userInput, history
         )
-        "mistral" -> OpenAiCompatibleClient.classify(
-            MISTRAL_BASE, PreferencesManager.getMistralApiKey(context), MISTRAL_MODEL,
-            "Mistral", IntentSchema.buildSystemPrompt(context), userInput, history
+        "github" -> OpenAiCompatibleClient.classify(
+            GITHUB_BASE, PreferencesManager.getGithubModelsApiKey(context), GITHUB_MODEL,
+            "GitHub Models", IntentSchema.buildSystemPrompt(context), userInput, history
         )
-        "cerebras" -> OpenAiCompatibleClient.classify(
-            CEREBRAS_BASE, PreferencesManager.getCerebrasApiKey(context), CEREBRAS_SIMPLE_MODEL,
-            "Cerebras", IntentSchema.buildSystemPrompt(context), userInput, history
+        "nvidia" -> OpenAiCompatibleClient.classify(
+            NVIDIA_BASE, PreferencesManager.getNvidiaApiKey(context), NVIDIA_MODEL,
+            "NVIDIA", IntentSchema.buildSystemPrompt(context), userInput, history
         )
         else -> JarvisIntent(intent = "CHAT", reply = "Bilinmeyen sağlayıcı.")
     }
@@ -180,18 +183,23 @@ object AssistantAi {
 
     /** Same provider fallback as [analyzeTextSmart], but returns null instead of an error sentence. */
     suspend fun analyzeTextOrNull(context: Context, prompt: String): String? {
+        lastRoundRateLimited = false
         for (provider in smartTierOrder.filter { hasKey(context, it) }) {
             val attempt = callAnalyzeText(context, provider, prompt)
             if (!IntentSchema.isErrorReply(attempt)) return attempt
+            if (IntentSchema.isRateLimited(attempt)) lastRoundRateLimited = true
         }
         return null
     }
+
+    @Volatile private var lastRoundRateLimited = false
 
     suspend fun analyzeTextSmart(context: Context, prompt: String): String {
         if (smartTierOrder.none { hasKey(context, it) })
             return "Hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan en az birini eklemen lazım."
         return analyzeTextOrNull(context, prompt)
-            ?: "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
+            ?: if (lastRoundRateLimited) IntentSchema.ALL_LIMITS_REACHED_REPLY
+            else "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
     }
 
     private suspend fun callAnalyzeText(context: Context, provider: String, prompt: String): String = when (provider) {
@@ -202,11 +210,11 @@ object AssistantAi {
         "groq" -> OpenAiCompatibleClient.analyzeText(
             GROQ_BASE, PreferencesManager.getGroqApiKey(context), GROQ_MODEL, "Groq", prompt
         )
-        "mistral" -> OpenAiCompatibleClient.analyzeText(
-            MISTRAL_BASE, PreferencesManager.getMistralApiKey(context), MISTRAL_MODEL, "Mistral", prompt
+        "github" -> OpenAiCompatibleClient.analyzeText(
+            GITHUB_BASE, PreferencesManager.getGithubModelsApiKey(context), GITHUB_MODEL, "GitHub Models", prompt
         )
-        "cerebras" -> OpenAiCompatibleClient.analyzeText(
-            CEREBRAS_BASE, PreferencesManager.getCerebrasApiKey(context), CEREBRAS_SMART_MODEL, "Cerebras", prompt
+        "nvidia" -> OpenAiCompatibleClient.analyzeText(
+            NVIDIA_BASE, PreferencesManager.getNvidiaApiKey(context), NVIDIA_MODEL, "NVIDIA", prompt
         )
         else -> IntentSchema.markError("Bilinmeyen sağlayıcı.")
     }
@@ -216,7 +224,7 @@ object AssistantAi {
     suspend fun analyzeVision(context: Context, prompt: String, imageBase64: String): String {
         val order = visionTierOrder.filter { hasKey(context, it) }
         if (order.isEmpty())
-            return "Görsel analiz için yapılandırılmış bir sağlayıcı yok — Ayarlar'dan Gemini, OpenRouter ya da Mistral anahtarı ekleyebilirsin."
+            return "Görsel analiz için yapılandırılmış bir sağlayıcı yok — Ayarlar'dan Gemini, OpenRouter ya da GitHub Models anahtarı ekleyebilirsin."
         for (provider in order) {
             val attempt = callAnalyzeImage(context, provider, prompt, imageBase64)
             if (!IntentSchema.isErrorReply(attempt)) return attempt
@@ -229,14 +237,14 @@ object AssistantAi {
         "openrouter" -> OpenAiCompatibleClient.analyzeImage(
             OPENROUTER_BASE, PreferencesManager.getOpenRouterApiKey(context), OPENROUTER_MODEL, "OpenRouter", prompt, imageBase64
         )
-        "mistral" -> OpenAiCompatibleClient.analyzeImage(
-            MISTRAL_BASE, PreferencesManager.getMistralApiKey(context), MISTRAL_MODEL, "Mistral", prompt, imageBase64
+        "github" -> OpenAiCompatibleClient.analyzeImage(
+            GITHUB_BASE, PreferencesManager.getGithubModelsApiKey(context), GITHUB_MODEL, "GitHub Models", prompt, imageBase64
         )
         else -> IntentSchema.markError("Bilinmeyen sağlayıcı.")
     }
 
-    fun resetConversation() {
-        guestHistory.clear()
+    fun resetConversation(context: Context) {
+        ConversationStore.clear(context)
     }
 
     /** Read-only copy of the current speaker's recent conversation turns, for exporting the chat. */

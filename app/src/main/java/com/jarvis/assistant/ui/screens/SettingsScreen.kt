@@ -10,6 +10,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import android.content.Intent
 import android.os.Build
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import com.jarvis.assistant.commands.RemotePhoneController
 import com.jarvis.assistant.service.RemoteCommandServerService
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,8 +59,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     var apiKey by remember { mutableStateOf(PreferencesManager.getApiKey(context)) }
     var groqApiKey by remember { mutableStateOf(PreferencesManager.getGroqApiKey(context)) }
     var openRouterApiKey by remember { mutableStateOf(PreferencesManager.getOpenRouterApiKey(context)) }
-    var mistralApiKey by remember { mutableStateOf(PreferencesManager.getMistralApiKey(context)) }
-    var cerebrasApiKey by remember { mutableStateOf(PreferencesManager.getCerebrasApiKey(context)) }
+    var githubModelsApiKey by remember { mutableStateOf(PreferencesManager.getGithubModelsApiKey(context)) }
+    var nvidiaApiKey by remember { mutableStateOf(PreferencesManager.getNvidiaApiKey(context)) }
+    var whatsAppAssistant by remember { mutableStateOf(PreferencesManager.isWhatsAppAssistantEnabled(context)) }
     var youtubeApiKey by remember { mutableStateOf(PreferencesManager.getYoutubeApiKey(context)) }
     var spotifyClientId by remember { mutableStateOf(PreferencesManager.getSpotifyClientId(context)) }
     var spotifyClientSecret by remember { mutableStateOf(PreferencesManager.getSpotifyClientSecret(context)) }
@@ -213,46 +217,46 @@ fun SettingsScreen(onBack: () -> Unit) {
         )
 
         Text(
-            text = "Mistral API Anahtarı (opsiyonel)",
+            text = "GitHub Models Anahtarı (opsiyonel)",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         OutlinedTextField(
-            value = mistralApiKey,
-            onValueChange = { mistralApiKey = it },
+            value = githubModelsApiKey,
+            onValueChange = { githubModelsApiKey = it },
             colors = fieldColors,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            placeholder = { Text("mistral anahtarı") }
+            placeholder = { Text("github_pat_...") }
         )
         Text(
-            text = "console.mistral.ai adresinden ücretsiz alabilirsin — görsel analizi de destekler.",
+            text = "Ücretsiz, kart gerekmez. github.com/settings/personal-access-tokens/new adresinden \"Models: Read\" izinli bir token oluştur — GPT-4.1 mini çalışır, görsel analizi de destekler. Günlük limiti vardır.",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
         )
 
         Text(
-            text = "Cerebras API Anahtarı (opsiyonel)",
+            text = "NVIDIA API Anahtarı (opsiyonel)",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         OutlinedTextField(
-            value = cerebrasApiKey,
-            onValueChange = { cerebrasApiKey = it },
+            value = nvidiaApiKey,
+            onValueChange = { nvidiaApiKey = it },
             colors = fieldColors,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            placeholder = { Text("csk-...") }
+            placeholder = { Text("nvapi-...") }
         )
         Text(
-            text = "cloud.cerebras.ai adresinden ücretsiz alabilirsin — çok hızlı, günlük 1 milyon token kotası var.",
+            text = "build.nvidia.com adresinden ücretsiz hesap açıp API anahtarı al (nvapi- ile başlar). Ücretsiz başlangıç kredisi verir, sadece metin.",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
@@ -277,7 +281,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         }
         Spacer(modifier = Modifier.width(4.dp))
         Row(modifier = Modifier.padding(top = 8.dp)) {
-            listOf("openrouter" to "OpenRouter", "mistral" to "Mistral", "cerebras" to "Cerebras").forEach { (id, label) ->
+            listOf("openrouter" to "OpenRouter", "github" to "GitHub", "nvidia" to "NVIDIA").forEach { (id, label) ->
                 Button(
                     onClick = { aiProvider = id },
                     colors = ButtonDefaults.buttonColors(
@@ -293,8 +297,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             color = JarvisTextSecondary,
             modifier = Modifier.padding(top = 4.dp)
         )
-        val configuredCount = remember(groqApiKey, apiKey, openRouterApiKey, mistralApiKey, cerebrasApiKey) {
-            listOf(apiKey, groqApiKey, openRouterApiKey, mistralApiKey, cerebrasApiKey).count { it.isNotBlank() }
+        val configuredCount = remember(groqApiKey, apiKey, openRouterApiKey, githubModelsApiKey, nvidiaApiKey) {
+            listOf(apiKey, groqApiKey, openRouterApiKey, githubModelsApiKey, nvidiaApiKey).count { it.isNotBlank() }
         }
         Text(
             text = "Şu an $configuredCount / 5 sağlayıcı yapılandırılmış.",
@@ -448,6 +452,68 @@ fun SettingsScreen(onBack: () -> Unit) {
             text = "Açarsan, yukarıdaki gibi bu cihazı BAŞKA bir Jarvis telefonundan kaydedip komut gönderebilirler (aynı Wi-Fi ağında).",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+
+        val myIp = remember { RemotePhoneController.localIp() }
+        Text(
+            text = if (myIp != null) "Bu telefonun IP adresi: $myIp  (diğer telefonda \"Telefon\" satırına bunu yaz)"
+            else "IP adresi bulunamadı — Wi-Fi'ye bağlı olduğundan emin ol.",
+            style = MaterialTheme.typography.labelMedium,
+            color = JarvisBlue,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            text = "İki telefon da AYNI Wi-Fi'de olmalı (misafir ağı/hotspot ve \"cihaz izolasyonu\" açık modemler engelleyebilir). Komut alan telefonda uygulamanın başka uygulamaların üzerinde açılabilmesi için aşağıdaki izni de ver.",
+            style = MaterialTheme.typography.labelSmall,
+            color = JarvisTextSecondary,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        val canOverlay = android.provider.Settings.canDrawOverlays(context)
+        Button(
+            onClick = {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:${context.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = JarvisBlue),
+            modifier = Modifier.padding(top = 8.dp)
+        ) { Text(if (canOverlay) "Üstte gösterme izni: AÇIK" else "Üstte gösterme iznini aç", color = androidx.compose.ui.graphics.Color.Black) }
+
+        Text(
+            text = "WhatsApp Mesaj Asistanı",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(top = 32.dp, bottom = 4.dp)
+        )
+        Text(
+            text = "WhatsApp'tan mesaj gelince \"Okumamı ister misin?\" diye sorar, okuduktan sonra \"Cevap göndermek ister misin?\" der ve söylediğini bildirimdeki Yanıtla ile gönderir. Bildirim erişimi izni gerekir. Jarvis uygulaması açıkken ya da arka plan dinleme açıkken çalışır.",
+            style = MaterialTheme.typography.labelSmall,
+            color = JarvisTextSecondary,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Switch(
+                checked = whatsAppAssistant,
+                onCheckedChange = { enabled ->
+                    whatsAppAssistant = enabled
+                    PreferencesManager.setWhatsAppAssistantEnabled(context, enabled)
+                    val granted = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+                    if (enabled && !granted) {
+                        context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = JarvisOrange, checkedTrackColor = JarvisBlue)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text("WhatsApp mesajlarını sesli sor", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
+        }
+        val listenerGranted = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+        Text(
+            text = if (listenerGranted) "Bildirim erişimi: AÇIK" else "Bildirim erişimi: KAPALI — anahtarı açınca açılan listeden Jarvis'e izin ver.",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (listenerGranted) JarvisBlue else JarvisOrange,
             modifier = Modifier.padding(top = 4.dp)
         )
 
@@ -626,8 +692,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 PreferencesManager.setApiKey(context, apiKey)
                 PreferencesManager.setGroqApiKey(context, groqApiKey)
                 PreferencesManager.setOpenRouterApiKey(context, openRouterApiKey)
-                PreferencesManager.setMistralApiKey(context, mistralApiKey)
-                PreferencesManager.setCerebrasApiKey(context, cerebrasApiKey)
+                PreferencesManager.setGithubModelsApiKey(context, githubModelsApiKey)
+                PreferencesManager.setNvidiaApiKey(context, nvidiaApiKey)
                 PreferencesManager.setAiProvider(context, aiProvider)
                 PreferencesManager.setYoutubeApiKey(context, youtubeApiKey)
                 PreferencesManager.setSpotifyClientId(context, spotifyClientId)
@@ -667,28 +733,40 @@ private fun RemotePhoneRow(
     fieldColors: androidx.compose.material3.TextFieldColors,
     label: String
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp)
-    ) {
-        OutlinedTextField(
-            value = name,
-            onValueChange = onNameChange,
-            colors = fieldColors,
-            singleLine = true,
-            placeholder = { Text(label) },
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        OutlinedTextField(
-            value = ip,
-            onValueChange = onIpChange,
-            colors = fieldColors,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            placeholder = { Text("192.168.1.xx") },
-            modifier = Modifier.weight(1f)
-        )
+    val scope = rememberCoroutineScope()
+    var status by remember { mutableStateOf("") }
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                colors = fieldColors,
+                singleLine = true,
+                placeholder = { Text(label) },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            OutlinedTextField(
+                value = ip,
+                onValueChange = onIpChange,
+                colors = fieldColors,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                placeholder = { Text("192.168.1.xx") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.TextButton(
+                enabled = ip.isNotBlank(),
+                onClick = {
+                    status = "Deneniyor..."
+                    scope.launch { status = RemotePhoneController.ping(ip) }
+                }
+            ) { Text("Bağlantıyı test et", color = JarvisBlue) }
+            if (status.isNotBlank()) {
+                Text(status, style = MaterialTheme.typography.labelSmall, color = JarvisTextSecondary)
+            }
+        }
     }
 }

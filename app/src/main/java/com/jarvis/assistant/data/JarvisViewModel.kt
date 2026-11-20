@@ -8,6 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.jarvis.assistant.commands.AlarmController
 import com.jarvis.assistant.commands.CommandProcessor
 import com.jarvis.assistant.commands.FlashlightController
+import com.jarvis.assistant.commands.IncomingMessage
+import com.jarvis.assistant.commands.IncomingMessageDialog
+import com.jarvis.assistant.commands.IncomingMessageHub
 import com.jarvis.assistant.commands.NotesController
 import com.jarvis.assistant.commands.PhoneController
 import com.jarvis.assistant.commands.ReminderController
@@ -51,11 +54,21 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         getLastKnownLocation = { getLastKnownLocation() }
     )
 
+    /** Gelen WhatsApp mesajı için "okuyayım mı / cevap yazayım mı" diyaloğu. */
+    private val messageDialog = IncomingMessageDialog(application)
+    private val appMessageHost: (IncomingMessage) -> Unit = { msg -> onIncomingMessage(msg) }
+
     private var speechRecognizer: SpeechRecognizerManager? = null
     private val tts = TextToSpeechManager(
         application,
         onStart = { _uiState.value = _uiState.value.copy(voiceState = VoiceState.SPEAKING) },
-        onDone = { _uiState.value = _uiState.value.copy(voiceState = VoiceState.IDLE) }
+        onDone = {
+            _uiState.value = _uiState.value.copy(voiceState = VoiceState.IDLE)
+            // WhatsApp diyaloğunda soru sorulduysa cevabı duymak için mikrofonu kendiliğinden aç.
+            if (messageDialog.awaitingAnswer) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ onMicButtonPressed() }, 350)
+            }
+        }
     )
 
     /** Haber paneli (başlık gezme, detay, arama, el hareketi) durumu. */
@@ -64,15 +77,32 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     init {
         commandProcessor.newsHandler = { text -> news.handleVoice(text) }
         commandProcessor.newsOpener = { query -> news.open(query) }
+        commandProcessor.dialogHandler = { text -> messageDialog.handle(text) }
+        IncomingMessageHub.appHost = appMessageHost
+    }
+
+    private fun onIncomingMessage(msg: IncomingMessage) {
+        if (!PreferencesManager.isWhatsAppAssistantEnabled(getApplication())) return
+        val question = messageDialog.onIncoming(msg) ?: return
+        _uiState.value = _uiState.value.copy(response = question)
+        tts.speak(question)
     }
 
     fun onMicButtonPressed() {
+        if (_uiState.value.backgroundListeningEnabled) {
+            // İki ses tanıyıcı aynı anda mikrofonu kullanamaz ("cannot record now as Jarvis is recording").
+            toggleBackgroundListening(false)
+            _uiState.value = _uiState.value.copy(
+                response = "Mikrofonu kullanabilmek için arka plan dinlemeyi kapattım."
+            )
+        }
         if (speechRecognizer == null) {
             speechRecognizer = SpeechRecognizerManager(
                 context = getApplication(),
                 onResult = { text -> handleRecognizedSpeech(text) },
                 onAmplitude = { amp -> _uiState.value = _uiState.value.copy(amplitude = amp) },
                 onError = { message ->
+                    if (messageDialog.awaitingAnswer) messageDialog.cancel()
                     _uiState.value = _uiState.value.copy(voiceState = VoiceState.IDLE, response = message)
                 },
                 onListeningStateChanged = { isListening ->
@@ -91,10 +121,29 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         val app = getApplication<Application>()
         val intent = Intent(app, JarvisBackgroundService::class.java)
         if (enabled) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                app.startForegroundService(intent)
-            } else {
-                app.startService(intent)
+            // Mikrofon izni yokken mikrofon türünde ön plan servisi başlatmak Android 11+ ta hata verir
+            // (bazı telefonlarda uygulamayı çökertir). Önce izni iste, anahtarı açık bırakma.
+            if (androidx.core.content.ContextCompat.checkSelfPermission(app, android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                _uiState.value = _uiState.value.copy(
+                    backgroundListeningEnabled = false,
+                    response = "Arka plan dinleme için mikrofon izni gerekiyor. İzni verdikten sonra anahtarı tekrar aç."
+                )
+                return
+            }
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    app.startForegroundService(intent)
+                } else {
+                    app.startService(intent)
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    backgroundListeningEnabled = false,
+                    response = "Arka plan dinleme başlatılamadı: ${e.message}"
+                )
+                return
             }
         } else {
             intent.action = JarvisBackgroundService.ACTION_STOP
@@ -154,6 +203,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         super.onCleared()
+        if (IncomingMessageHub.appHost === appMessageHost) IncomingMessageHub.appHost = null
         speechRecognizer?.destroy()
         tts.shutdown()
     }

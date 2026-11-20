@@ -83,3 +83,11 @@ Home Assistant seçersen, doğrudan REST API + access token kullanan özel bir i
 - **Dokunma**: kartları kaydır, karta dokun = detay, arama kutusu ve konu çipleri.
 - **Ses**: "sonraki", "önceki", "detay", "3. haber", "oku", "ekonomi haberlerini ara", "kapat".
 - El modeli ilk kullanımda internetten indirilir (veya `app/src/main/assets/hand_landmarker.task` olarak koyabilirsin).
+
+## v24 değişiklikleri
+- **WhatsApp mesaj asistanı** (Ayarlar'dan aç + Bildirim erişimi izni): gelen mesajda "okumamı ister misin?" → okur → "cevap göndermek ister misin?" → söylediğini bildirimdeki Yanıtla ile yollar.
+- **Ücretsiz limit**: tüm sağlayıcıların limiti dolarsa "ücretsiz kullanım limitime takıldım, sonra tekrar konuşmak isterim" der.
+- **Konuşma geçmişi** diske kaydedilir (300 mesaj), yapay zekaya son 60 mesaj/14 bin karakter gider.
+- Mistral/Cerebras yerine **GitHub Models** ve **NVIDIA NIM** eklendi.
+- Eşleştirme: HTTP engeli (cleartext) kaldırıldı, IP gösterimi ve "Bağlantıyı test et" eklendi.
+- Mikrofon: ses tanıma servisi görünürlüğü, izin kontrolleri ve hata döngüsü düzeltildi.

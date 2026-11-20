@@ -27,7 +27,7 @@ object PeopleStore {
     private const val KEY_SENSITIVITY = "speaker_sensitivity"
     private const val HISTORY_PREFIX = "history_"
     private const val MAX_FINGERPRINTS = 9
-    private const val MAX_HISTORY = 40
+    private const val MAX_HISTORY = 300
 
     private val lock = Any()
 

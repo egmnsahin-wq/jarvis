@@ -18,7 +18,7 @@ jobs:
           gradle-version: 8.7
       - name: local.properties
         run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "sdk.dir=${ANDROID_HOME:-/usr/local/lib/android/sdk}" > local.properties
           echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> local.properties
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace

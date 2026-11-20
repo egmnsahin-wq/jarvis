@@ -35,6 +35,9 @@ class CommandProcessor(
      * "bu dosyayı analiz et" refer to "the file I just picked" without needing a filename. */
     var lastPickedFileUri: android.net.Uri? = null
 
+    /** Gelen WhatsApp mesajı diyaloğu ("okuyayım mı?", "cevap yazayım mı?"). Diyalog yoksa null döner. */
+    var dialogHandler: ((String) -> String?)? = null
+
     /** Haber paneli sesli komutları (açık/sonraki/önceki/detay/ara...). Eşleşmezse null döner. */
     var newsHandler: (suspend (String) -> String?)? = null
 
@@ -70,6 +73,9 @@ class CommandProcessor(
 
     private suspend fun processInternal(rawText: String): String {
         val text = rawText.trim().lowercase(Locale("tr"))
+
+        // Gelen mesaj diyaloğu sürüyorsa cevap önce ona gider (ham metin: yazılacak mesajın harfleri bozulmasın).
+        dialogHandler?.invoke(rawText.trim())?.let { return it }
 
         // A user-defined routine's trigger phrase always wins first — most specific match.
         val matchingRoutines = RoutineController.findMatchingRoutines(context, text)

@@ -30,7 +30,13 @@ class SpeechRecognizerManager(
     private val identifyFilter: ((String) -> Boolean)? = null
 ) {
     private val appContext = context.applicationContext
-    private val recognizer: SpeechRecognizer = SpeechRecognizer.createSpeechRecognizer(context)
+    // Bazı telefonlarda (Google ses servisi yok/devre dışı) tanıyıcı oluşturulamaz; çökmek yerine
+    // kullanıcıya anlaşılır bir mesaj veriyoruz.
+    private val recognizer: SpeechRecognizer? = try {
+        if (SpeechRecognizer.isRecognitionAvailable(context)) SpeechRecognizer.createSpeechRecognizer(context) else null
+    } catch (e: Exception) {
+        null
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val identifyExecutor = Executors.newSingleThreadExecutor()
 
@@ -38,10 +44,10 @@ class SpeechRecognizerManager(
     @Volatile private var capturingSpeaker = false
     // Some devices give the recognizer exclusive mic access; if a capture ever coincides with an
     // audio error we stop trying (voice commands keep working, just without speaker detection).
-    @Volatile private var captureBroken = false
+    @Volatile private var captureBroken = true
 
     init {
-        recognizer.setRecognitionListener(object : RecognitionListener {
+        recognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 onListeningStateChanged(true)
             }
@@ -102,6 +108,17 @@ class SpeechRecognizerManager(
     }
 
     fun startListening() {
+        val rec = recognizer
+        if (rec == null) {
+            onError("Bu telefonda ses tanıma servisi bulunamadı. Play Store'dan \"Google\" uygulamasını kurup güncelle, Ayarlar > Uygulamalar > Varsayılan uygulamalar > Ses girişi bölümünden Google'ı seç.")
+            return
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            onError("Mikrofon izni gerekli. Ayarlar > Uygulamalar > Jarvis > İzinler bölümünden mikrofona izin ver.")
+            return
+        }
         if (!captureBroken && PeopleStore.getForcedSpeakerId(appContext) == null &&
             PeopleStore.hasEnrolledPeople(appContext)
         ) {
@@ -112,18 +129,23 @@ class SpeechRecognizerManager(
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale("tr", "TR"))
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         }
-        recognizer.startListening(intent)
+        try {
+            rec.startListening(intent)
+        } catch (e: Exception) {
+            onListeningStateChanged(false)
+            onError("Ses tanıma başlatılamadı: ${e.message}")
+        }
     }
 
     fun stopListening() {
-        recognizer.stopListening()
+        try { recognizer?.stopListening() } catch (e: Exception) { }
     }
 
     fun destroy() {
         if (capturingSpeaker) SpeakerIdController.cancelCapture()
         capturingSpeaker = false
         identifyExecutor.shutdown()
-        recognizer.destroy()
+        try { recognizer?.destroy() } catch (e: Exception) { }
     }
 
     private fun errorMessage(error: Int): String = when (error) {
@@ -132,6 +154,10 @@ class SpeechRecognizerManager(
         SpeechRecognizer.ERROR_NETWORK -> "Ağ hatası."
         SpeechRecognizer.ERROR_AUDIO -> "Ses kaydı hatası."
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Mikrofon izni gerekli."
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Ses tanıma meşgul, birkaç saniye sonra tekrar dene."
+        SpeechRecognizer.ERROR_CLIENT -> "Ses tanıma başlatılamadı, tekrar dene."
+        SpeechRecognizer.ERROR_SERVER -> "Google ses tanıma sunucusu yanıt vermedi."
+        12, 13 -> "Türkçe ses tanıma bu telefonda desteklenmiyor ya da dil paketi indirilmemiş."
         else -> "Ses tanıma hatası ($error)"
     }
 }

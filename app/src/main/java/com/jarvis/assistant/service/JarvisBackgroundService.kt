@@ -19,6 +19,9 @@ import com.jarvis.assistant.MainActivity
 import com.jarvis.assistant.commands.AlarmController
 import com.jarvis.assistant.commands.CommandProcessor
 import com.jarvis.assistant.commands.FlashlightController
+import com.jarvis.assistant.commands.IncomingMessage
+import com.jarvis.assistant.commands.IncomingMessageDialog
+import com.jarvis.assistant.commands.IncomingMessageHub
 import com.jarvis.assistant.commands.NotesController
 import com.jarvis.assistant.commands.PhoneController
 import com.jarvis.assistant.commands.ReminderController
@@ -54,6 +57,9 @@ class JarvisBackgroundService : Service() {
     private lateinit var speechRecognizer: SpeechRecognizerManager
     private lateinit var tts: TextToSpeechManager
     private lateinit var commandProcessor: CommandProcessor
+    private lateinit var messageDialog: IncomingMessageDialog
+    private val hostCallback: (IncomingMessage) -> Unit = { msg -> onIncomingMessage(msg) }
+    private var errorStreak = 0
     private val handler = Handler(Looper.getMainLooper())
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
@@ -70,10 +76,24 @@ class JarvisBackgroundService : Service() {
             return START_NOT_STICKY
         }
         if (!running) {
+            // Mikrofon izni yoksa mikrofon türünde ön plan servisi başlatılamaz (Android 11+ SecurityException).
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
             running = true
             val wakeWord = PreferencesManager.getAssistantName(this)
-            startForeground(NOTIFICATION_ID, buildNotification("$wakeWord dinliyor... \"$wakeWord\" diyerek çağır"))
+            try {
+                startForeground(NOTIFICATION_ID, buildNotification("$wakeWord dinliyor... \"$wakeWord\" diyerek çağır"))
+            } catch (e: Exception) {
+                running = false
+                stopSelf()
+                return START_NOT_STICKY
+            }
             setupEngines()
+            IncomingMessageHub.serviceHost = hostCallback
             startListeningWakeWord()
             registerBatteryWatcher()
             registerWifiArrivalWatcher()
@@ -154,15 +174,38 @@ class JarvisBackgroundService : Service() {
             getLastKnownLocation = { getLastKnownLocationSafe() }
         )
 
+        messageDialog = IncomingMessageDialog(this)
+        commandProcessor.dialogHandler = { text -> messageDialog.handle(text) }
+
         tts = TextToSpeechManager(
             this,
-            onDone = { handler.postDelayed({ startListeningWakeWord() }, 400) }
+            onDone = {
+                handler.postDelayed({
+                    // WhatsApp sorusu sorulduysa cevabı komut modunda dinle, yoksa uyandırma kelimesine dön.
+                    if (::messageDialog.isInitialized && messageDialog.awaitingAnswer) startListeningForCommand()
+                    else startListeningWakeWord()
+                }, 400)
+            }
         )
 
         speechRecognizer = SpeechRecognizerManager(
             context = this,
-            onResult = { text -> handleResult(text) },
-            onError = { handler.postDelayed({ if (mode == Mode.WAKE_WORD) startListeningWakeWord() }, 500) },
+            onResult = { text -> errorStreak = 0; handleResult(text) },
+            onError = { message ->
+                if (::messageDialog.isInitialized && messageDialog.awaitingAnswer) messageDialog.cancel()
+                // Sessizlik/anlaşılmadı gibi normal hatalar uyandırma döngüsünün parçası: hemen yeniden dinle.
+                // Gerçek hatalarda (servis yok, izin yok, meşgul) aralığı büyüt, çok sürerse servisi durdur.
+                val hard = message.contains("bulunamadı") || message.contains("izni") ||
+                    message.contains("başlatılamadı") || message.contains("meşgul") || message.contains("kaydı hatası")
+                if (hard) errorStreak++ else errorStreak = 0
+                if (errorStreak >= 8) {
+                    updateNotification(message)
+                    stopSelf()
+                } else {
+                    val delay = if (hard) (500L * errorStreak).coerceAtMost(5000L) else 500L
+                    handler.postDelayed({ startListeningWakeWord() }, delay)
+                }
+            },
             onListeningStateChanged = { },
             // Arka plan dinlemede her lafı değil, sadece komutu (uyandırma kelimesi geçen ya da
             // komut modunda söylenen cümleyi) kimin söylediğini belirle.
@@ -216,8 +259,16 @@ class JarvisBackgroundService : Service() {
                     startListeningWakeWord()
                 }
             }
-            Mode.COMMAND -> processCommand(lower)
+            Mode.COMMAND -> processCommand(if (messageDialog.awaitingAnswer) text else lower)
         }
+    }
+
+    /** Gelen WhatsApp mesajı: arka plan servisi açıkken soruyu burada sorarız. */
+    private fun onIncomingMessage(msg: IncomingMessage) {
+        if (!PreferencesManager.isWhatsAppAssistantEnabled(this) || !::messageDialog.isInitialized) return
+        val question = messageDialog.onIncoming(msg) ?: return
+        updateNotification(question)
+        tts.speak(question) // onDone -> cevap dinleme
     }
 
     private fun processCommand(text: String) {
@@ -267,6 +318,7 @@ class JarvisBackgroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         running = false
+        if (IncomingMessageHub.serviceHost === hostCallback) IncomingMessageHub.serviceHost = null
         serviceJob.cancel()
         if (::speechRecognizer.isInitialized) speechRecognizer.destroy()
         if (::tts.isInitialized) tts.shutdown()

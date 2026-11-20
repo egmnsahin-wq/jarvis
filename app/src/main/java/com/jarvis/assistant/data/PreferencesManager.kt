@@ -24,8 +24,9 @@ object PreferencesManager {
     private const val KEY_AI_PROVIDER = "ai_provider"
     private const val KEY_GROQ_API_KEY = "groq_api_key"
     private const val KEY_OPENROUTER_API_KEY = "openrouter_api_key"
-    private const val KEY_MISTRAL_API_KEY = "mistral_api_key"
-    private const val KEY_CEREBRAS_API_KEY = "cerebras_api_key"
+    private const val KEY_GITHUB_MODELS_API_KEY = "github_models_api_key"
+    private const val KEY_NVIDIA_API_KEY = "nvidia_api_key"
+    private const val KEY_WHATSAPP_ASSISTANT = "whatsapp_assistant_enabled"
     private const val KEY_YOUTUBE_API_KEY = "youtube_api_key"
     private const val KEY_SPOTIFY_CLIENT_ID = "spotify_client_id"
     private const val KEY_SPOTIFY_CLIENT_SECRET = "spotify_client_secret"
@@ -142,14 +143,21 @@ object PreferencesManager {
         prefs(context).edit().putString(KEY_OPENROUTER_API_KEY, key.trim()).apply()
     }
 
-    fun getMistralApiKey(context: Context): String = prefs(context).getString(KEY_MISTRAL_API_KEY, "") ?: ""
-    fun setMistralApiKey(context: Context, key: String) {
-        prefs(context).edit().putString(KEY_MISTRAL_API_KEY, key.trim()).apply()
+    // GitHub Models (ücretsiz, GitHub token'ı ile) ve NVIDIA NIM (ücretsiz kredi) — Mistral/Cerebras yerine.
+    fun getGithubModelsApiKey(context: Context): String = prefs(context).getString(KEY_GITHUB_MODELS_API_KEY, "") ?: ""
+    fun setGithubModelsApiKey(context: Context, key: String) {
+        prefs(context).edit().putString(KEY_GITHUB_MODELS_API_KEY, key.trim()).apply()
     }
 
-    fun getCerebrasApiKey(context: Context): String = prefs(context).getString(KEY_CEREBRAS_API_KEY, "") ?: ""
-    fun setCerebrasApiKey(context: Context, key: String) {
-        prefs(context).edit().putString(KEY_CEREBRAS_API_KEY, key.trim()).apply()
+    fun getNvidiaApiKey(context: Context): String = prefs(context).getString(KEY_NVIDIA_API_KEY, "") ?: ""
+    fun setNvidiaApiKey(context: Context, key: String) {
+        prefs(context).edit().putString(KEY_NVIDIA_API_KEY, key.trim()).apply()
+    }
+
+    /** WhatsApp gelen mesaj asistanı (bildirim dinleme + "okuyayım mı?" soruları). Varsayılan kapalı. */
+    fun isWhatsAppAssistantEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_WHATSAPP_ASSISTANT, false)
+    fun setWhatsAppAssistantEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_WHATSAPP_ASSISTANT, enabled).apply()
     }
 
     // --- Song-playback credentials (optional — without these, playSong falls back to just

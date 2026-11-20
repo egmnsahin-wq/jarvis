@@ -71,6 +71,33 @@ object RemotePhoneController {
     suspend fun notify(context: Context, phoneName: String, message: String): String =
         send(context, phoneName, JSONObject().put("action", "NOTIFY").put("message", message))
 
+    /** Ayarlar'daki "Bağlantıyı test et" düğmesi: kaydetmeden doğrudan girilen IP'ye PING atar. */
+    suspend fun ping(ip: String): String = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("http://${ip.trim()}:${RemoteCommandServerService.PORT}/command")
+                .post(JSONObject().put("action", "PING").toString().toRequestBody("application/json".toMediaType()))
+                .build()
+            client.newCall(request).execute().use { response ->
+                val msg = try { JSONObject(response.body?.string().orEmpty()).optString("message") } catch (e: Exception) { "" }
+                if (response.isSuccessful) "✓ Bağlandı ${msg}" else "✗ Telefon yanıt verdi ama reddetti (${response.code})"
+            }
+        } catch (e: Exception) {
+            "✗ Ulaşılamadı: karşı telefonda \"uzaktan kontrole aç\" açık mı, aynı Wi-Fi'de misiniz, IP doğru mu?"
+        }
+    }
+
+    /** Bu telefonun yerel ağ (Wi-Fi) IPv4 adresi; diğer telefona yazılacak değer. */
+    fun localIp(): String? = try {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { it is java.net.Inet4Address && it.isSiteLocalAddress }
+            ?.hostAddress
+    } catch (e: Exception) {
+        null
+    }
+
     // ---------- Core sender ----------
 
     private suspend fun send(context: Context, phoneName: String, payload: JSONObject): String =
