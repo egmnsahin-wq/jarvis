@@ -160,7 +160,7 @@ class RemoteCommandServerService : Service() {
                 val name = str("contact") ?: return "Kişi belirtilmedi."
                 val message = str("message") ?: return "Mesaj metni belirtilmedi."
                 val number = phoneController.findContactNumber(name)
-                if (number != null) whatsAppController.sendMessage(number, message)
+                if (number != null) kotlinx.coroutines.runBlocking { whatsAppController.sendMessageAuto(number, message) }
                 else "$name adında bir kişi bulunamadı."
             }
 

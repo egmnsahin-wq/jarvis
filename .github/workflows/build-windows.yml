@@ -1,0 +1,29 @@
+name: Build Windows
+on:
+  push:
+    paths:
+      - 'windows/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Bağımlılıklar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r windows/requirements.txt pyinstaller
+      - name: exe derle
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name JarvisMasaustu
+          --collect-all speech_recognition --collect-all edge_tts --collect-all certifi
+          windows/main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JarvisMasaustu-windows
+          path: dist/JarvisMasaustu.exe

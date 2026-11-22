@@ -98,3 +98,7 @@ Home Assistant seçersen, doğrudan REST API + access token kullanan özel bir i
 - **Yapay zeka önce**: her cümle önce yapay zekaya gider (doğal dil); internet/anahtar yoksa kural tabanlı komutlar yedek çalışır.
 - **Doğal ve değişken cevaplar**; hata olunca yapay zeka hatayı kendi cümleleriyle sade anlatır. "Durumunu kontrol et" diyince kendi kendini tarar.
 - **WhatsApp'ta "X'e şunu yaz"**: Erişilebilirlik izni açıksa Gönder tuşuna kendisi basar.
+
+## v26: Windows sürümü
+`windows/` klasöründe Jarvis Masaüstü uygulaması var (Python/tkinter). GitHub Actions "Build Windows" çalışması `JarvisMasaustu.exe` üretir. Ayrıntı: `windows/README.md`.
+Not: telefondaki "bilgisayar komutları" önceden olmayan `jarvis_pc_agent.py` dosyasını bekliyordu; artık Masaüstü uygulaması bu protokolü (port 8766) karşılıyor.

@@ -446,7 +446,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             placeholder = { Text("192.168.1.60") }
         )
         Text(
-            text = "Bilgisayarında jarvis_pc_agent.py çalışıyor olmalı. IP'yi cmd'de \"ipconfig\" yazarak görebilirsin.",
+            text = "Bilgisayarında Jarvis Masaüstü uygulaması (JarvisMasaustu.exe) açık olmalı. Uygulamanın Ayarlar ekranında bilgisayarın IP adresi yazar; bu telefonun IP adresini de oradaki Telefonlar bölümüne eklemelisin.",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
             modifier = Modifier.padding(top = 4.dp)

@@ -12,7 +12,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Sends commands to the Windows PC running jarvis_pc_agent.py (see that file for setup).
+ * Sends commands to the Windows PC running the "Jarvis Masaüstü" app (see windows/ folder).
  * Same trust model as [TvController] and [RemotePhoneController]: local network only, no auth.
  */
 object PcController {
@@ -61,7 +61,7 @@ object PcController {
                     ?: if (response.isSuccessful) "Bilgisayara komut gönderildi." else "Bilgisayar komutu reddetti."
             }
         } catch (e: Exception) {
-            "Bilgisayara ulaşamadım. Aynı Wi-Fi ağında ve pc_agent.py çalışır durumda olduğundan emin ol."
+            "Bilgisayara ulaşamadım. Aynı Wi-Fi ağında olduğunuzdan, Jarvis Masaüstü uygulamasının açık olduğundan ve telefonun IP'sinin bilgisayardaki Ayarlar'da kayıtlı olduğundan emin ol."
         }
     }
 }
