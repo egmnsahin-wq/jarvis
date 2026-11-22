@@ -72,6 +72,9 @@ object AssistantAi {
 
     // ---------- Structured intent classification ----------
 
+    /** Herhangi bir sağlayıcı için anahtar girilmiş mi? (Tek bir Gemini anahtarı yeterli.) */
+    fun hasAnyKey(context: Context): Boolean = configuredProviderCount(context) > 0
+
     suspend fun classify(context: Context, userInput: String): JarvisIntent {
         // Captured once up front so the whole request (prompt, history, saving the turn) is about
         // the same person even if identification updates while the network call is in flight.
@@ -98,9 +101,9 @@ object AssistantAi {
             reply = if (order.isEmpty())
                 "Hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan en az birini eklemen lazım."
             else if (rateLimited)
-                IntentSchema.ALL_LIMITS_REACHED_REPLY
+                ErrorVoice.limitReached()
             else
-                "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
+                ErrorVoice.unreachable()
         )
 
         // Failure replies ("anahtar girilmemiş", rate limit…) aren't real conversation — don't store them.
@@ -198,8 +201,8 @@ object AssistantAi {
         if (smartTierOrder.none { hasKey(context, it) })
             return "Hiçbir yapay zeka anahtarı girilmemiş. Ayarlar'dan en az birini eklemen lazım."
         return analyzeTextOrNull(context, prompt)
-            ?: if (lastRoundRateLimited) IntentSchema.ALL_LIMITS_REACHED_REPLY
-            else "Şu an hiçbir yapay zeka sağlayıcısına ulaşamadım, biraz sonra tekrar dener misin?"
+            ?: if (lastRoundRateLimited) ErrorVoice.limitReached()
+            else ErrorVoice.unreachable()
     }
 
     private suspend fun callAnalyzeText(context: Context, provider: String, prompt: String): String = when (provider) {

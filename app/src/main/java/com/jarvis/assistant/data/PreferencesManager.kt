@@ -26,6 +26,7 @@ object PreferencesManager {
     private const val KEY_OPENROUTER_API_KEY = "openrouter_api_key"
     private const val KEY_GITHUB_MODELS_API_KEY = "github_models_api_key"
     private const val KEY_NVIDIA_API_KEY = "nvidia_api_key"
+    private const val KEY_GEMINI_MODEL = "gemini_working_model"
     private const val KEY_WHATSAPP_ASSISTANT = "whatsapp_assistant_enabled"
     private const val KEY_YOUTUBE_API_KEY = "youtube_api_key"
     private const val KEY_SPOTIFY_CLIENT_ID = "spotify_client_id"
@@ -141,6 +142,12 @@ object PreferencesManager {
     fun getOpenRouterApiKey(context: Context): String = prefs(context).getString(KEY_OPENROUTER_API_KEY, "") ?: ""
     fun setOpenRouterApiKey(context: Context, key: String) {
         prefs(context).edit().putString(KEY_OPENROUTER_API_KEY, key.trim()).apply()
+    }
+
+    /** Son başarılı Gemini modeli (model adları Google tarafından değişebildiği için otomatik saklanır). */
+    fun getGeminiModel(context: Context): String = prefs(context).getString(KEY_GEMINI_MODEL, "") ?: ""
+    fun setGeminiModel(context: Context, model: String) {
+        prefs(context).edit().putString(KEY_GEMINI_MODEL, model).apply()
     }
 
     // GitHub Models (ücretsiz, GitHub token'ı ile) ve NVIDIA NIM (ücretsiz kredi) — Mistral/Cerebras yerine.

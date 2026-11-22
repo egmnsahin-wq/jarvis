@@ -83,7 +83,7 @@ object IntentSchema {
             Kullanıcının söylediği Türkçe cümleyi analiz et ve SADECE aşağıdaki JSON şemasında,
             başka hiçbir açıklama, markdown ya da kod bloğu olmadan, saf JSON olarak cevap ver:
 
-            {"intent":"<TIME|WEATHER|FLASHLIGHT_ON|FLASHLIGHT_OFF|VOLUME_UP|VOLUME_DOWN|SILENT_ON|SILENT_OFF|BRIGHTNESS_UP|BRIGHTNESS_DOWN|BATTERY|SEARCH_GOOGLE|SEARCH_YOUTUBE|PLAY_SONG|NOTE_ADD|NOTES_READ|NOTES_CLEAR|REMINDER|ALARM|TIMER|CALL|SMS|WHATSAPP|OPEN_APP|SMART_HOME_ON|SMART_HOME_OFF|TV_OPEN_APP|TV_OPEN_URL|TV_POWER_OFF|TV_VOLUME_UP|TV_VOLUME_DOWN|TV_SET_VOLUME|TV_MUTE|TV_UNMUTE|TV_SEARCH_YOUTUBE|REMOTE_PLAY_SONG|REMOTE_SEARCH_GOOGLE|REMOTE_SEARCH_YOUTUBE|REMOTE_SET_ALARM|REMOTE_REMINDER|REMOTE_CALL|REMOTE_SMS|REMOTE_WHATSAPP|REMOTE_OPEN_APP|REMOTE_FLASHLIGHT_ON|REMOTE_FLASHLIGHT_OFF|REMOTE_BATTERY|REMOTE_FIND_PHONE|REMOTE_NOTIFY|MEMORY_SAVE|MEMORY_READ|MEMORY_CLEAR|BRIGHTNESS_SET|WIFI_SETTINGS|BLUETOOTH_SETTINGS|FIND_MY_PHONE|ALARM_LIST|MISSED_CALLS|REMOTE_BATTERY_ALL|TODO_ADD|TODO_DONE|TODO_LIST|TODO_CLEAR_DONE|ALIAS_SET|TEMPLATE_SET|TEMPLATE_SEND|CALCULATE|CURRENCY|NEWS|DAILY_SUMMARY|CONVERSATION_EXPORT|HOME_WIFI_SET|ARRIVAL_REMINDER|PC_OPEN_APP|PC_OPEN_URL|PC_SHUTDOWN|PC_RESTART|PC_SLEEP|PC_LOCK|PC_VOLUME_UP|PC_VOLUME_DOWN|PC_MUTE|PC_MEDIA_PLAY_PAUSE|PC_MEDIA_NEXT|PC_MEDIA_PREV|FILE_ANALYZE|FILE_ANALYZE_TO_FILE|CREATE_FILE|SCREEN_ASK|TRANSLATE|CALENDAR_ADD_EVENT|CALENDAR_TODAY|LEAVE_REMINDER|PREFERENCE_SET|CHAT>",
+            {"intent":"<TIME|WEATHER|FLASHLIGHT_ON|FLASHLIGHT_OFF|VOLUME_UP|VOLUME_DOWN|SILENT_ON|SILENT_OFF|BRIGHTNESS_UP|BRIGHTNESS_DOWN|BATTERY|SEARCH_GOOGLE|SEARCH_YOUTUBE|PLAY_SONG|NOTE_ADD|NOTES_READ|NOTES_CLEAR|REMINDER|ALARM|TIMER|CALL|SMS|WHATSAPP|OPEN_APP|SMART_HOME_ON|SMART_HOME_OFF|TV_OPEN_APP|TV_OPEN_URL|TV_POWER_OFF|TV_VOLUME_UP|TV_VOLUME_DOWN|TV_SET_VOLUME|TV_MUTE|TV_UNMUTE|TV_SEARCH_YOUTUBE|REMOTE_PLAY_SONG|REMOTE_SEARCH_GOOGLE|REMOTE_SEARCH_YOUTUBE|REMOTE_SET_ALARM|REMOTE_REMINDER|REMOTE_CALL|REMOTE_SMS|REMOTE_WHATSAPP|REMOTE_OPEN_APP|REMOTE_FLASHLIGHT_ON|REMOTE_FLASHLIGHT_OFF|REMOTE_BATTERY|REMOTE_FIND_PHONE|REMOTE_NOTIFY|MEMORY_SAVE|MEMORY_READ|MEMORY_CLEAR|BRIGHTNESS_SET|WIFI_SETTINGS|BLUETOOTH_SETTINGS|FIND_MY_PHONE|ALARM_LIST|MISSED_CALLS|REMOTE_BATTERY_ALL|TODO_ADD|TODO_DONE|TODO_LIST|TODO_CLEAR_DONE|ALIAS_SET|TEMPLATE_SET|TEMPLATE_SEND|CALCULATE|CURRENCY|NEWS|DAILY_SUMMARY|CONVERSATION_EXPORT|HOME_WIFI_SET|ARRIVAL_REMINDER|PC_OPEN_APP|PC_OPEN_URL|PC_SHUTDOWN|PC_RESTART|PC_SLEEP|PC_LOCK|PC_VOLUME_UP|PC_VOLUME_DOWN|PC_MUTE|PC_MEDIA_PLAY_PAUSE|PC_MEDIA_NEXT|PC_MEDIA_PREV|FILE_ANALYZE|FILE_ANALYZE_TO_FILE|CREATE_FILE|SCREEN_ASK|TRANSLATE|CALENDAR_ADD_EVENT|CALENDAR_TODAY|LEAVE_REMINDER|PREFERENCE_SET|SELF_CHECK|CHAT>",
              "query":"<arama/şarkı metni varsa, yoksa null>",
              "note":"<not edilecek metin varsa, yoksa null>",
              "minutes":<hatırlatıcı/sayaç için dakika sayısı varsa, yoksa null>,
@@ -252,6 +252,24 @@ object IntentSchema {
             konuşan bir asistan gibi biraz farklı ama kısa ve samimi ifadeler kullan (örn. bazen
             "Tamam, arıyorum.", bazen "Hemen bağlanıyorum.", bazen "Oldu, çeviriyorum." gibi).
 
+            KONUŞMA ÜSLUBU VE ANLAMA (çok önemli):
+            - Metin sesli tanımadan geliyor: yanlış duyulmuş kelimeler, eksik ekler, küçük harf, noktalama
+              yokluğu olabilir (\"fener aç\" ≈ \"feneri aç\", \"ahmed\" ≈ \"Ahmet\"). Kelimesi kelimesine değil,
+              kullanıcının NİYETİNE göre karar ver. Kişi adlarını rehberdeki gibi yazılmış hâline yaklaştır.
+            - Önceki konuşmayı hatırla: \"onu da kapat\", \"aynısını anneme de yaz\", \"az önceki şarkıyı tekrar aç\"
+              gibi gönderme yapan cümleleri geçmişe bakarak çöz.
+            - Bir isteği tamamlamak için KRİTİK bir bilgi eksikse (kime? ne yazayım? saat kaç?) eylem
+              yapma, intent CHAT ile tek kısa soru sor. Küçük eksikleri makul varsayımla tamamla.
+            - \"mesaj gönder\", \"yaz\", \"söyle\", \"ilet\" gibi isteklerde (WHATSAPP/SMS) Jarvis mesajı kendisi
+              gönderir, kullanıcının Gönder'e basması gerekmez; reply'ı buna göre kur (örn. \"Gönderiyorum\").
+            - Telefon/uygulama dışında genel bir soru, sohbet, tavsiye, bilgi, özet, şiir, kod, tarif vb.
+              istendiğinde de sıkılmadan, doğal ve yardımsever cevap ver (CHAT). Cevabın sesli okunacağı
+              için madde işareti, emoji, markdown KULLANMA; kısa ve akıcı konuş.
+            - Sistem durumunu, neden çalışmadığını ya da \"sorun ne\", \"neden cevap vermiyorsun\", \"durumunu
+              kontrol et\" gibi şeyleri sorarsa intent SELF_CHECK.
+            - \"reply\" her seferinde farklı kalıplarla, bir insan gibi: bazen kısa, bazen samimi; aynı
+              onay cümlesini tekrar tekrar kullanma.
+
             Emin olmadığın alanları null bırak, asla uydurma bilgi verme. ASLA cevabının tamamını
             (bütün JSON'u) json null yapma veya "null" kelimesini tek başına bir alan değeri olarak
             yazma — bir şeyden emin değilsen o alanı gerçek JSON null yap, "null" kelimesini metin
@@ -359,7 +377,8 @@ object IntentSchema {
     private val FAILURE_MARKERS = listOf(
         RATE_LIMIT_MARKER, "Ücretsiz kullanım limitime takıldım", "API anahtarı geçersiz", "API anahtarı girilmemiş",
         "kullanılan model artık geçerli değil", "sunucularında geçici bir sorun",
-        "isteği başarısız oldu", "Bağlantı hatası", "Bir cevap alamadım"
+        "isteği başarısız oldu", "Bağlantı hatası", "Bir cevap alamadım",
+        "ulaşamadım", "ulaşamıyorum", "bağlanamadım"
     )
 
     fun isFailureReply(intent: JarvisIntent): Boolean =

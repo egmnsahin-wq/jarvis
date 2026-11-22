@@ -5,6 +5,7 @@ import android.content.Intent
 import android.location.LocationManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.jarvis.assistant.ai.AssistantAi
 import com.jarvis.assistant.commands.AlarmController
 import com.jarvis.assistant.commands.CommandProcessor
 import com.jarvis.assistant.commands.FlashlightController
@@ -79,6 +80,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         commandProcessor.newsOpener = { query -> news.open(query) }
         commandProcessor.dialogHandler = { text -> messageDialog.handle(text) }
         IncomingMessageHub.appHost = appMessageHost
+        if (!AssistantAi.hasAnyKey(getApplication())) {
+            _uiState.value = _uiState.value.copy(
+                response = "Merhaba! Başlamak için sağ üstteki dişli simgesinden ücretsiz bir Gemini anahtarı eklemen yeterli, orada nasıl alacağını adım adım yazdım."
+            )
+        }
     }
 
     private fun onIncomingMessage(msg: IncomingMessage) {

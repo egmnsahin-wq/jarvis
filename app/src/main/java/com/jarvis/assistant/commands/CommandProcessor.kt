@@ -2,6 +2,7 @@ package com.jarvis.assistant.commands
 
 import android.content.Context
 import com.jarvis.assistant.ai.AssistantAi
+import com.jarvis.assistant.ai.IntentSchema
 import com.jarvis.assistant.ai.JarvisIntent
 import com.jarvis.assistant.data.PreferencesManager
 import com.jarvis.assistant.speaker.SpeakerContext
@@ -98,6 +99,17 @@ class CommandProcessor(
             return dispatchAiIntent(rawText)
         }
 
+        // Yapay zeka önce: doğal cümleleri en iyi o anlar. Anahtar yoksa ya da yapay zeka cevap veremediyse
+        // aşağıdaki kural tabanlı komutlar yedek olarak devreye girer (internetsiz de temel komutlar çalışsın).
+        if (AssistantAi.hasAnyKey(context)) {
+            val result = AssistantAi.classify(context, rawText)
+            if (!IntentSchema.isFailureReply(result)) return executeIntent(rawText, result)
+            return runRules(rawText, text) { result.reply }
+        }
+        return runRules(rawText, text) { dispatchAiIntent(rawText) }
+    }
+
+    private suspend fun runRules(rawText: String, text: String, noMatch: suspend () -> String): String {
         return when {
             // --- Time ---
             text.contains("saat kaç") || text.contains("saati söyle") -> {
@@ -214,14 +226,16 @@ class CommandProcessor(
             // (Calling someone, sending SMS/WhatsApp, opening an app or a TV app, and smart-home
             // on/off all live here now — anything with a free-text name/message benefits far more
             // from real language understanding than from rigid keyword+colon parsing.) ---
-            else -> dispatchAiIntent(rawText)
+            else -> noMatch()
         }
     }
 
     /** Sends the sentence to Gemini for natural-language intent understanding, then executes it. */
-    private suspend fun dispatchAiIntent(rawText: String): String {
-        val result = AssistantAi.classify(context, rawText)
-        return when (result.intent) {
+    private suspend fun dispatchAiIntent(rawText: String): String =
+        executeIntent(rawText, AssistantAi.classify(context, rawText))
+
+    private suspend fun executeIntent(rawText: String, result: JarvisIntent): String {
+        val out: String = when (result.intent) {
             "TIME" -> {
                 val sdf = SimpleDateFormat("HH:mm", Locale("tr"))
                 "Şu anda saat ${sdf.format(Calendar.getInstance().time)}."
@@ -301,7 +315,7 @@ class CommandProcessor(
                     val number = phoneController.findContactNumber(name)
                     if (number != null) {
                         val channel = PreferencesManager.getPreference(context, "whatsapp_kanal") ?: "app"
-                        whatsAppController.sendMessage(number, msg, channel)
+                        whatsAppController.sendMessageAuto(number, msg, channel)
                     } else "$name adında bir kişi bulamadım."
                 } else result.reply
             }
@@ -412,7 +426,7 @@ class CommandProcessor(
                 if (name == null || template == null) "Kişiyi ya da şablonu bulamadım."
                 else {
                     val number = phoneController.findContactNumber(name)
-                    if (number != null) whatsAppController.sendMessage(number, template)
+                    if (number != null) whatsAppController.sendMessageAuto(number, template)
                     else "$name adında bir kişi bulamadım."
                 }
             }
@@ -492,8 +506,48 @@ class CommandProcessor(
                     result.reply
                 } else "Hangi tercihi kaydetmemi istediğini tam anlayamadım."
             }
+            "SELF_CHECK" -> DiagnosticsController.run(context)
             else -> result.reply // CHAT or unrecognized
         }
+        return finalizeReply(rawText, result, out)
+    }
+
+    // Sabit onay cümlesi yerine yapay zekanın her seferinde farklı kurduğu doğal cümleyi söylediğimiz eylemler.
+    private val AI_REPLY_INTENTS = setOf(
+        "FLASHLIGHT_ON", "FLASHLIGHT_OFF", "VOLUME_UP", "VOLUME_DOWN", "SILENT_ON", "SILENT_OFF",
+        "BRIGHTNESS_UP", "BRIGHTNESS_DOWN", "BRIGHTNESS_SET", "SEARCH_GOOGLE", "SEARCH_YOUTUBE",
+        "NOTE_ADD", "REMINDER", "ALARM", "TIMER", "OPEN_APP", "MEMORY_SAVE", "MEMORY_CLEAR",
+        "TODO_ADD", "TODO_CLEAR_DONE", "ALIAS_SET", "TEMPLATE_SET", "HOME_WIFI_SET", "ARRIVAL_REMINDER",
+        "LEAVE_REMINDER", "PREFERENCE_SET", "NOTES_CLEAR", "CALENDAR_ADD_EVENT"
+    )
+
+    /**
+     * Eylemin gerçek sonucunu kullanıcıya doğal bir dille iletir:
+     * - başarısız olduysa hatayı yapay zeka kendi cümleleriyle sade biçimde açıklar,
+     * - başarılı bir eylemse yapay zekanın ürettiği (her seferinde farklı) cümleyi söyler,
+     * - bilgi isteyen komutlarda (saat, hava, pil, liste...) gerçek veriyi olduğu gibi verir.
+     */
+    private suspend fun finalizeReply(rawText: String, result: JarvisIntent, out: String): String {
+        if (result.intent == "CHAT" || out == result.reply) return out
+        val failed = FAILURE_WORDS.any { out.contains(it, ignoreCase = true) }
+        if (failed) return explainFailure(rawText, out)
+        if (result.intent in AI_REPLY_INTENTS && result.reply.isNotBlank() && !result.reply.trim().equals("Tamam.", true)) {
+            return result.reply
+        }
+        return out
+    }
+
+    private suspend fun explainFailure(rawText: String, technical: String): String {
+        // Zaten yapay zeka tarafından anlatılmış / yapay zekanın kendi hatasıysa tekrar sormaya gerek yok.
+        if (technical.contains("limitime takıldım") || technical.contains("yapay zeka") || technical.contains("anahtar")) return technical
+        val name = PreferencesManager.getAssistantName(context)
+        val prompt = "Sen $name adlı sesli bir asistansın. Kullanıcı şunu istedi: \"$rawText\". " +
+            "Bunu yapmaya çalıştım ama sonuç şuydu: \"$technical\". " +
+            "Kullanıcıya bunu en fazla 2 kısa, samimi ve doğal Türkçe cümleyle açıkla: ne olduğunu sade anlat, " +
+            "mümkünse ne yapabileceğini söyle. Teknik terim, emoji ve madde işareti kullanma; " +
+            "her seferinde farklı ifadeler seç. Sadece söylenecek metni yaz."
+        val ai = AssistantAi.analyzeTextOrNull(context, prompt)?.trim()?.trim('"')
+        return if (!ai.isNullOrBlank() && ai.length < 400) ai else technical
     }
 
     /** Runs [action] against result.targetPhone, or falls back to the AI's reply if no phone name was given. */

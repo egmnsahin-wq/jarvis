@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Jarvis</string>
-    <string name="accessibility_service_description">Jarvis\'in "ekranımda ne var" gibi sorulara cevap verebilmesi için ekranın anlık görüntüsünü alır. Başka hiçbir şey yapmaz — otomatik tıklama ya da başka bir uygulamayı kontrol etme yeteneği yoktur.</string>
+    <string name="accessibility_service_description">Jarvis\'in "ekranımda ne var" sorularına cevap verebilmesi için ekranın anlık görüntüsünü alır ve "şunu yaz" komutlarında WhatsApp\'ta hazır yazılmış mesajın Gönder düğmesine basar. Başka hiçbir uygulamada işlem yapmaz.</string>
 </resources>

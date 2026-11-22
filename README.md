@@ -91,3 +91,10 @@ Home Assistant seçersen, doğrudan REST API + access token kullanan özel bir i
 - Mistral/Cerebras yerine **GitHub Models** ve **NVIDIA NIM** eklendi.
 - Eşleştirme: HTTP engeli (cleartext) kaldırıldı, IP gösterimi ve "Bağlantıyı test et" eklendi.
 - Mikrofon: ses tanıma servisi görünürlüğü, izin kontrolleri ve hata döngüsü düzeltildi.
+
+## v25 değişiklikleri
+- **Tek Gemini anahtarı yeter**: Ayarlar'da adım adım "Anahtar al" rehberi ve "Anahtarı test et" düğmesi var; diğer sağlayıcılar "Yedek" bölümüne taşındı (kapalı gelir).
+- **Gemini model adı otomatik**: Google eski modelleri kapattığı için model sabit değil; çalışanı bulur, limit/404'te sıradakine geçer, gerekirse Google'ın model listesinden seçer.
+- **Yapay zeka önce**: her cümle önce yapay zekaya gider (doğal dil); internet/anahtar yoksa kural tabanlı komutlar yedek çalışır.
+- **Doğal ve değişken cevaplar**; hata olunca yapay zeka hatayı kendi cümleleriyle sade anlatır. "Durumunu kontrol et" diyince kendi kendini tarar.
+- **WhatsApp'ta "X'e şunu yaz"**: Erişilebilirlik izni açıksa Gönder tuşuna kendisi basar.

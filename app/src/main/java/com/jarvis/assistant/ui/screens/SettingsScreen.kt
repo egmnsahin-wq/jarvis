@@ -61,6 +61,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     var openRouterApiKey by remember { mutableStateOf(PreferencesManager.getOpenRouterApiKey(context)) }
     var githubModelsApiKey by remember { mutableStateOf(PreferencesManager.getGithubModelsApiKey(context)) }
     var nvidiaApiKey by remember { mutableStateOf(PreferencesManager.getNvidiaApiKey(context)) }
+    var showAdvancedProviders by remember {
+        mutableStateOf(groqApiKey.isNotBlank() || openRouterApiKey.isNotBlank() || githubModelsApiKey.isNotBlank() || nvidiaApiKey.isNotBlank())
+    }
+    var geminiTestResult by remember { mutableStateOf("") }
+    val geminiScope = rememberCoroutineScope()
     var whatsAppAssistant by remember { mutableStateOf(PreferencesManager.isWhatsAppAssistantEnabled(context)) }
     var youtubeApiKey by remember { mutableStateOf(PreferencesManager.getYoutubeApiKey(context)) }
     var spotifyClientId by remember { mutableStateOf(PreferencesManager.getSpotifyClientId(context)) }
@@ -164,12 +169,53 @@ fun SettingsScreen(onBack: () -> Unit) {
             placeholder = { Text("AIza...") }
         )
         Text(
-            text = "aistudio.google.com/app/apikey adresinden ücretsiz alabilirsin.",
+            text = "Tek bu anahtar yeter, başka hiçbir anahtar gerekmez. Nasıl alınır:\n" +
+                "1) Aşağıdaki düğmeye dokun, Google hesabınla giriş yap.\n" +
+                "2) \"Create API key\" (API anahtarı oluştur) düğmesine dokun.\n" +
+                "3) Çıkan AIza... ile başlayan anahtarı kopyalayıp yukarıya yapıştır ve en alttaki Kaydet'e bas.\n" +
+                "Ücretsizdir, kart istemez.",
             style = MaterialTheme.typography.labelSmall,
             color = JarvisTextSecondary,
             modifier = Modifier.padding(top = 4.dp)
         )
+        Row(modifier = Modifier.padding(top = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Button(
+                onClick = {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/apikey"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = JarvisBlue)
+            ) { Text("Anahtar al", color = androidx.compose.ui.graphics.Color.Black) }
+            Spacer(modifier = Modifier.width(8.dp))
+            androidx.compose.material3.TextButton(
+                enabled = apiKey.isNotBlank(),
+                onClick = {
+                    geminiTestResult = "Deneniyor..."
+                    geminiScope.launch { geminiTestResult = com.jarvis.assistant.ai.GeminiClient.test(context, apiKey) }
+                }
+            ) { Text("Anahtarı test et", color = JarvisBlue) }
+        }
+        if (geminiTestResult.isNotBlank()) {
+            Text(geminiTestResult, style = MaterialTheme.typography.labelSmall, color = JarvisTextSecondary)
+        }
 
+        androidx.compose.material3.TextButton(
+            onClick = { showAdvancedProviders = !showAdvancedProviders },
+            modifier = Modifier.padding(top = 20.dp)
+        ) {
+            Text(
+                if (showAdvancedProviders) "▼ Yedek yapay zeka sağlayıcıları (gerekmez)" else "▶ Yedek yapay zeka sağlayıcıları (gerekmez)",
+                color = JarvisBlue
+            )
+        }
+        Text(
+            text = "Gemini anahtarı tek başına yeterli. Çok yoğun kullanırsan, Gemini'nin ücretsiz günlük limiti dolunca devreye girecek yedekler eklemek istersen burayı aç.",
+            style = MaterialTheme.typography.labelSmall,
+            color = JarvisTextSecondary
+        )
+        if (showAdvancedProviders) {
         Text(
             text = "Groq API Anahtarı (alternatif, opsiyonel)",
             style = MaterialTheme.typography.titleMedium,
@@ -306,6 +352,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             color = if (configuredCount >= 2) JarvisBlue else JarvisOrange,
             modifier = Modifier.padding(top = 4.dp)
         )
+
+        }
 
         Text(
             text = "Şarkı Çalma (opsiyonel)",
