@@ -132,7 +132,9 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFF0B1520), JarvisBackground)))
     ) {
-        val wide = maxWidth >= 840.dp && maxWidth > maxHeight
+        val screenW = maxWidth
+        val screenH = maxHeight
+        val wide = screenW >= 840.dp && screenW > screenH
 
         if (wide) {
             // ------------------------------ TABLET (yatay) ------------------------------
@@ -173,7 +175,7 @@ fun HomeScreen(
                             ParticleOrb(
                                 state = state.voiceState,
                                 amplitude = state.amplitude,
-                                diameter = minOf(maxHeight - 260.dp, maxWidth * 0.40f, 460.dp).coerceAtLeast(200.dp),
+                                diameter = minOf(screenH - 260.dp, screenW * 0.40f, 460.dp).coerceAtLeast(200.dp),
                                 particleCount = 800
                             )
                         }
@@ -230,7 +232,7 @@ fun HomeScreen(
                     ParticleOrb(
                         state = state.voiceState,
                         amplitude = state.amplitude,
-                        diameter = minOf(maxWidth - 24.dp, maxHeight * 0.42f).coerceAtLeast(180.dp),
+                        diameter = minOf(screenW - 24.dp, screenH * 0.42f).coerceAtLeast(180.dp),
                         particleCount = 550
                     )
                 }
@@ -285,7 +287,7 @@ fun HomeScreen(
                     fallbackResponse = state.response,
                     onSend = onSend,
                     onClose = { showChat = false },
-                    modifier = Modifier.fillMaxWidth().height(maxHeight * 0.5f)
+                    modifier = Modifier.fillMaxWidth().height(screenH * 0.5f)
                 )
             }
 
