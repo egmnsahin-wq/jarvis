@@ -102,3 +102,10 @@ Home Assistant seçersen, doğrudan REST API + access token kullanan özel bir i
 ## v26: Windows sürümü
 `windows/` klasöründe Jarvis Masaüstü uygulaması var (Python/tkinter). GitHub Actions "Build Windows" çalışması `JarvisMasaustu.exe` üretir. Ayrıntı: `windows/README.md`.
 Not: telefondaki "bilgisayar komutları" önceden olmayan `jarvis_pc_agent.py` dosyasını bekliyordu; artık Masaüstü uygulaması bu protokolü (port 8766) karşılıyor.
+
+## v27: HUD arayüzü + canlı kamera
+- Ana ekran yenilendi: parçacıklı orb, dinleme dalgası paneli, sohbet paneli, dosya paneli, üstte pil/RAM/bağlantı/saat çubuğu, altta 4 butonlu bar.
+- Tablet (yatay, 840dp+): 3 sütunlu düzen. Telefon/dikey: orb ortada, kamera sürüklenebilir küçük pencere, sohbet ve dosya alttan açılan kartlar.
+- Canlı kamera: panelden soru yaz (boş bırakırsan "ne görüyorsun?") veya "Jarvis, kameradan bak, bu ne?" de. Tek kare çekilir, mevcut vision hattına (Gemini/OpenRouter/GitHub) gider.
+- Dosya panelinde "Fotoğraf" seçeneği: galeriden fotoğraf seçip analiz ettirir.
+- Yeni dosyalar: ui/components/HudKit.kt, ParticleOrb.kt, LiveCameraPanel.kt, commands/CameraAskController.kt

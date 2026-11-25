@@ -1,59 +1,77 @@
 package com.jarvis.assistant.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Row
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import com.jarvis.assistant.data.JarvisViewModel
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Article
-import com.jarvis.assistant.ui.components.JarvisOrb
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.jarvis.assistant.commands.CameraBridge
+import com.jarvis.assistant.data.JarvisViewModel
+import com.jarvis.assistant.data.PreferencesManager
+import com.jarvis.assistant.ui.components.ChatPanel
+import com.jarvis.assistant.ui.components.FilePanel
+import com.jarvis.assistant.ui.components.HudBottomBar
+import com.jarvis.assistant.ui.components.HudIconButton
+import com.jarvis.assistant.ui.components.HudStats
+import com.jarvis.assistant.ui.components.HudStatusChip
+import com.jarvis.assistant.ui.components.HudTitle
+import com.jarvis.assistant.ui.components.LiveCameraPanel
 import com.jarvis.assistant.ui.components.NewsPanel
+import com.jarvis.assistant.ui.components.ParticleOrb
 import com.jarvis.assistant.ui.components.VoiceState
+import com.jarvis.assistant.ui.components.WavePanel
+import com.jarvis.assistant.ui.components.rememberClock
+import com.jarvis.assistant.ui.components.rememberHudStats
+import com.jarvis.assistant.ui.theme.JarvisBackground
 import com.jarvis.assistant.ui.theme.JarvisBlue
 import com.jarvis.assistant.ui.theme.JarvisOrange
+import com.jarvis.assistant.ui.theme.JarvisTextPrimary
 import com.jarvis.assistant.ui.theme.JarvisTextSecondary
+import kotlin.math.roundToInt
 
 @Composable
 fun HomeScreen(
@@ -62,209 +80,228 @@ fun HomeScreen(
     onOpenSettings: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val assistantName = remember(state) { com.jarvis.assistant.data.PreferencesManager.getAssistantName(context) }
+    val context = LocalContext.current
+    val assistantName = remember(state) { PreferencesManager.getAssistantName(context) }
+    val stats by rememberHudStats()
+    val clock by rememberClock()
 
-    Box(
+    var showWave by remember { mutableStateOf(true) }
+    var showCamera by remember { mutableStateOf(false) }
+    var showFiles by remember { mutableStateOf(false) }
+    var showChat by remember { mutableStateOf(false) }          // yalnızca telefon düzeninde kaplama
+    var chatCollapsed by remember { mutableStateOf(false) }     // yalnızca tablet düzeninde
+    var cameraOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // "Jarvis, kameradan bak" komutu paneli kendiliğinden açabilsin.
+    DisposableEffect(Unit) {
+        CameraBridge.panelOpener = { showCamera = true }
+        onDispose { CameraBridge.panelOpener = null }
+    }
+
+    val textFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val name = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && idx >= 0) cursor.getString(idx) else null
+            } ?: "dosya"
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (e: Exception) { /* her sağlayıcı kalıcı izin vermez, sorun değil */ }
+            viewModel.onFileSelected(uri, name)
+        }
+    }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.onImageSelected(uri)
+    }
+
+    val onMic: () -> Unit = {
+        showWave = true
+        onRequestMicPermission()
+        viewModel.onMicButtonPressed()
+    }
+    val onNews: () -> Unit = { viewModel.news.openFromUi(null) }
+    val onSend: (String) -> Unit = { viewModel.onTextSubmitted(it) }
+    val onBackgroundToggle: (Boolean) -> Unit = { enabled ->
+        onRequestMicPermission()
+        viewModel.toggleBackgroundListening(enabled)
+    }
+    val listening = state.voiceState == VoiceState.LISTENING
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Brush.verticalGradient(listOf(Color(0xFF0B1520), JarvisBackground)))
     ) {
-        IconButton(
-            onClick = onOpenSettings,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 16.dp, end = 16.dp)
-        ) {
-            Icon(Icons.Filled.Settings, contentDescription = "Ayarlar", tint = JarvisTextSecondary)
-        }
+        val wide = maxWidth >= 840.dp && maxWidth > maxHeight
 
-        IconButton(
-            onClick = { viewModel.news.openFromUi(null) },
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 16.dp, start = 16.dp)
-        ) {
-            Icon(Icons.Filled.Article, contentDescription = "Haberler", tint = JarvisBlue)
-        }
+        if (wide) {
+            // ------------------------------ TABLET (yatay) ------------------------------
+            Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+                TopBar(assistantName, false, stats, clock, onNews, onOpenSettings)
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = assistantName.uppercase(),
-                style = MaterialTheme.typography.headlineLarge,
-                color = JarvisBlue,
-                fontWeight = FontWeight.Light
-            )
+                Row(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.weight(0.28f).fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        if (showWave) {
+                            WavePanel(
+                                state = state.voiceState,
+                                amplitude = state.amplitude,
+                                onMic = onMic,
+                                onClose = { showWave = false },
+                                modifier = Modifier.fillMaxWidth().weight(1f)
+                            )
+                        }
+                        if (showCamera) {
+                            LiveCameraPanel(
+                                onClose = { showCamera = false },
+                                onAsk = { viewModel.onCameraQuestion(it) },
+                                modifier = Modifier.fillMaxWidth().weight(1.35f)
+                            )
+                        }
+                    }
 
-            Text(
-                text = statusLabel(state.voiceState),
-                style = MaterialTheme.typography.labelSmall,
-                color = JarvisTextSecondary,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+                    Column(
+                        modifier = Modifier.weight(0.44f).fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            ParticleOrb(
+                                state = state.voiceState,
+                                amplitude = state.amplitude,
+                                diameter = minOf(maxHeight - 260.dp, maxWidth * 0.40f, 460.dp).coerceAtLeast(200.dp),
+                                particleCount = 800
+                            )
+                        }
+                        ReplyText(state.transcript, state.response, maxLines = 3)
+                        BackgroundListenRow(assistantName, state.backgroundListeningEnabled, onBackgroundToggle)
+                    }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 12.dp)
-            ) {
-                Text(
-                    text = "Arka planda \"$assistantName\" ile uyan",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Switch(
-                    checked = state.backgroundListeningEnabled,
-                    onCheckedChange = { enabled ->
-                        onRequestMicPermission()
-                        viewModel.toggleBackgroundListening(enabled)
-                    },
-                    colors = SwitchDefaults.colors(checkedThumbColor = JarvisOrange, checkedTrackColor = JarvisOrange.copy(alpha = 0.5f)),
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-
-            // Central Jarvis orb — sits on its own, roughly mid-screen, not tied to the mic button.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                JarvisOrb(state = state.voiceState, amplitude = state.amplitude)
-            }
-
-            // Conversation history
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 180.dp)
-                    .padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.Bottom,
-                contentPadding = PaddingValues(vertical = 8.dp)
-            ) {
-                items(state.history) { (userText, jarvisText) ->
-                    Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                        Text(
-                            text = "Sen: $userText",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = JarvisTextSecondary
+                    Column(
+                        modifier = Modifier.weight(0.28f).fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        ChatPanel(
+                            assistantName = assistantName,
+                            history = state.history,
+                            fallbackResponse = state.response,
+                            onSend = onSend,
+                            collapsed = chatCollapsed,
+                            onMinimize = { chatCollapsed = !chatCollapsed },
+                            modifier = Modifier.fillMaxWidth().then(if (chatCollapsed) Modifier else Modifier.weight(1f))
                         )
-                        Text(
-                            text = "Jarvis: $jarvisText",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
+                        if (showFiles) {
+                            FilePanel(
+                                onPickTextFile = { textFilePicker.launch(arrayOf("*/*")) },
+                                onPickImage = { imagePicker.launch(arrayOf("image/*")) },
+                                onClose = { showFiles = false },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
-                if (state.history.isEmpty()) {
-                    item {
-                        Text(
-                            text = state.response,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                    }
-                }
-            }
 
-            // Text input — types a command through the exact same pipeline as voice.
-            var typedText by remember { mutableStateOf("") }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-            ) {
-                OutlinedTextField(
-                    value = typedText,
-                    onValueChange = { typedText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Yazarak sor...") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = MaterialTheme.colorScheme.onBackground,
-                        unfocusedTextColor = MaterialTheme.colorScheme.onBackground
+                Box(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
+                    HudBottomBar(
+                        listening = listening,
+                        chatOpen = !chatCollapsed,
+                        cameraOpen = showCamera,
+                        filesOpen = showFiles,
+                        onMic = onMic,
+                        onText = { chatCollapsed = false },
+                        onCamera = { showCamera = !showCamera },
+                        onFiles = { showFiles = !showFiles }
                     )
+                }
+            }
+        } else {
+            // ------------------------------ TELEFON / DİKEY ------------------------------
+            Column(
+                modifier = Modifier.fillMaxSize().padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                TopBar(assistantName, true, stats, clock, onNews, onOpenSettings)
+                BackgroundListenRow(assistantName, state.backgroundListeningEnabled, onBackgroundToggle)
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    ParticleOrb(
+                        state = state.voiceState,
+                        amplitude = state.amplitude,
+                        diameter = minOf(maxWidth - 24.dp, maxHeight * 0.42f).coerceAtLeast(180.dp),
+                        particleCount = 550
+                    )
+                }
+                ReplyText(state.transcript, state.response, maxLines = 4)
+                HudBottomBar(
+                    listening = listening,
+                    chatOpen = showChat,
+                    cameraOpen = showCamera,
+                    filesOpen = showFiles,
+                    onMic = onMic,
+                    onText = {
+                        showChat = !showChat
+                        if (showChat) showFiles = false
+                    },
+                    onCamera = { showCamera = !showCamera },
+                    onFiles = {
+                        showFiles = !showFiles
+                        if (showFiles) showChat = false
+                    },
+                    modifier = Modifier.padding(top = 8.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {
-                    if (typedText.isNotBlank()) {
-                        viewModel.onTextSubmitted(typedText)
-                        typedText = ""
-                    }
-                }) {
-                    Icon(Icons.Filled.Send, contentDescription = "Gönder", tint = JarvisBlue)
-                }
             }
 
-            // Mic button — standalone now, the orb above already carries the visual feedback.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val context = LocalContext.current
-                val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-                    if (uri != null) {
-                        val name = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                            val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                            if (cursor.moveToFirst() && idx >= 0) cursor.getString(idx) else null
-                        } ?: "dosya"
-                        try {
-                            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        } catch (e: Exception) { /* not all providers support persistable permissions, fine either way */ }
-                        viewModel.onFileSelected(uri, name)
-                    }
-                }
-
-                Surface(
+            // Sürüklenebilir küçük kamera penceresi
+            if (showCamera) {
+                LiveCameraPanel(
+                    onClose = { showCamera = false },
+                    onAsk = { viewModel.onCameraQuestion(it) },
                     modifier = Modifier
-                        .size(48.dp)
-                        .clickable { filePicker.launch(arrayOf("*/*")) },
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.AttachFile,
-                            contentDescription = "Dosya seç ve analiz et",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(20.dp))
-
-                Surface(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clickable {
-                            onRequestMicPermission()
-                            viewModel.onMicButtonPressed()
-                        },
-                    shape = CircleShape,
-                    color = if (state.voiceState == VoiceState.LISTENING) JarvisOrange else JarvisBlue
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = "Konuş",
-                            tint = Color.Black,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                }
+                        .align(Alignment.TopEnd)
+                        .padding(top = 130.dp, end = 12.dp)
+                        .offset { IntOffset(cameraOffset.x.roundToInt(), cameraOffset.y.roundToInt()) }
+                        .size(width = 220.dp, height = 300.dp)
+                        .pointerInput(Unit) {
+                            detectDragGestures { change, drag ->
+                                change.consume()
+                                cameraOffset += drag
+                            }
+                        }
+                )
             }
 
-            Text(
-                text = if (state.transcript.isNotBlank()) "\"${state.transcript}\"" else "Basılı tutmadan tek dokun, konuş",
-                style = MaterialTheme.typography.labelSmall,
-                color = JarvisTextSecondary,
-                modifier = Modifier.padding(top = 16.dp)
-            )
+            AnimatedVisibility(
+                visible = showChat,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 120.dp),
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) {
+                ChatPanel(
+                    assistantName = assistantName,
+                    history = state.history,
+                    fallbackResponse = state.response,
+                    onSend = onSend,
+                    onClose = { showChat = false },
+                    modifier = Modifier.fillMaxWidth().height(maxHeight * 0.5f)
+                )
+            }
+
+            AnimatedVisibility(
+                visible = showFiles,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(start = 12.dp, end = 12.dp, bottom = 120.dp),
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) {
+                FilePanel(
+                    onPickTextFile = { textFilePicker.launch(arrayOf("*/*")) },
+                    onPickImage = { imagePicker.launch(arrayOf("image/*")) },
+                    onClose = { showFiles = false },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
 
         val newsState by viewModel.news.state.collectAsState()
@@ -274,9 +311,87 @@ fun HomeScreen(
     }
 }
 
-private fun statusLabel(state: VoiceState): String = when (state) {
-    VoiceState.IDLE -> "HAZIR"
-    VoiceState.LISTENING -> "DİNLİYORUM..."
-    VoiceState.THINKING -> "DÜŞÜNÜYORUM..."
-    VoiceState.SPEAKING -> "KONUŞUYORUM..."
+@Composable
+private fun TopBar(
+    assistantName: String,
+    compact: Boolean,
+    stats: HudStats,
+    time: String,
+    onNews: () -> Unit,
+    onSettings: () -> Unit
+) {
+    if (compact) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                HudIconButton(Icons.Filled.Article, "Haberler", JarvisBlue, onNews)
+                HudTitle(assistantName.uppercase(), compact = true)
+                HudIconButton(Icons.Filled.Settings, "Ayarlar", JarvisTextSecondary, onSettings)
+            }
+            HudStatusChip(stats, time, compact = true, modifier = Modifier.padding(top = 8.dp))
+        }
+    } else {
+        Box(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) {
+            HudStatusChip(stats, time, compact = false, modifier = Modifier.align(Alignment.CenterStart))
+            HudTitle(assistantName.uppercase(), compact = false, modifier = Modifier.align(Alignment.TopCenter))
+            Row(
+                modifier = Modifier.align(Alignment.CenterEnd),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HudIconButton(Icons.Filled.Article, "Haberler", JarvisBlue, onNews)
+                HudIconButton(Icons.Filled.Settings, "Ayarlar", JarvisTextSecondary, onSettings)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReplyText(transcript: String, response: String, maxLines: Int) {
+    Column(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        if (transcript.isNotBlank()) {
+            Text(
+                text = "\"$transcript\"",
+                fontSize = 12.sp,
+                color = JarvisTextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+        Text(
+            text = response,
+            fontSize = 15.sp,
+            color = JarvisTextPrimary,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun BackgroundListenRow(assistantName: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(
+            text = "Arka planda \"$assistantName\" ile uyan",
+            style = MaterialTheme.typography.bodySmall,
+            color = JarvisTextSecondary
+        )
+        Switch(
+            checked = enabled,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = JarvisOrange,
+                checkedTrackColor = JarvisOrange.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
 }

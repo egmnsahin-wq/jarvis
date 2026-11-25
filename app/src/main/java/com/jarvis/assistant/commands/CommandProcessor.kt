@@ -477,6 +477,7 @@ class CommandProcessor(
                 else FileAnalysisController.createFile(context, topic, null)
             }
             "SCREEN_ASK" -> ScreenUnderstandingController.ask(context, result.query)
+            "CAMERA_ASK" -> CameraAskController.ask(context, result.query)
             "TRANSLATE" -> {
                 val text = result.query
                 val lang = result.translateTo

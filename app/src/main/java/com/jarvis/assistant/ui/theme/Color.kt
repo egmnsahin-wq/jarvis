@@ -11,3 +11,10 @@ val JarvisTextSecondary = Color(0xFF7FA8C9)
 val JarvisError = Color(0xFFFF5555)
 val JarvisGreen = Color(0xFF3CFF8E)
 val JarvisAmber = Color(0xFFFFC233)
+
+// ---- HUD arayüzü (v27) ----
+val HudGold = Color(0xFFFFC857)
+val HudCyan = Color(0xFF4FE3FF)
+val HudPanelTop = Color(0xCC16212E)
+val HudPanelBottom = Color(0xCC0C121B)
+val HudStroke = Color(0x6628B8D8)

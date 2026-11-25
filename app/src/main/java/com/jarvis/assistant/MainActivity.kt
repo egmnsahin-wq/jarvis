@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.CAMERA,
         Manifest.permission.CALL_PHONE,
         Manifest.permission.SEND_SMS,
         Manifest.permission.READ_CONTACTS,

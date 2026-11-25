@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jarvis.assistant.ai.AssistantAi
 import com.jarvis.assistant.commands.AlarmController
+import com.jarvis.assistant.commands.CameraAskController
 import com.jarvis.assistant.commands.CommandProcessor
 import com.jarvis.assistant.commands.FlashlightController
 import com.jarvis.assistant.commands.IncomingMessage
@@ -183,6 +184,36 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(transcript = label, voiceState = VoiceState.THINKING)
         viewModelScope.launch {
             val reply = commandProcessor.process(label)
+            _uiState.value = _uiState.value.copy(
+                response = reply,
+                history = _uiState.value.history + (label to reply),
+                voiceState = VoiceState.IDLE
+            )
+            tts.speak(reply)
+        }
+    }
+
+    /** Kamera panelinden doğrudan soru (tek vision isteği; önce niyet sınıflandırması yapmaz). */
+    fun onCameraQuestion(question: String?) {
+        val label = if (question.isNullOrBlank()) "Kameradan: ne görüyorsun?" else "Kameradan: $question"
+        _uiState.value = _uiState.value.copy(transcript = label, voiceState = VoiceState.THINKING)
+        viewModelScope.launch {
+            val reply = CameraAskController.ask(getApplication(), question)
+            _uiState.value = _uiState.value.copy(
+                response = reply,
+                history = _uiState.value.history + (label to reply),
+                voiceState = VoiceState.IDLE
+            )
+            tts.speak(reply)
+        }
+    }
+
+    /** Galeriden seçilen fotoğrafı analiz eder. */
+    fun onImageSelected(uri: android.net.Uri) {
+        val label = "Fotoğrafı analiz et"
+        _uiState.value = _uiState.value.copy(transcript = label, voiceState = VoiceState.THINKING)
+        viewModelScope.launch {
+            val reply = CameraAskController.askImage(getApplication(), uri, null)
             _uiState.value = _uiState.value.copy(
                 response = reply,
                 history = _uiState.value.history + (label to reply),
