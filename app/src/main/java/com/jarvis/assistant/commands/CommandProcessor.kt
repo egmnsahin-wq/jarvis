@@ -476,6 +476,7 @@ class CommandProcessor(
                 if (topic == null) "Ne hakkında bir dosya oluşturmamı istediğini anlayamadım."
                 else FileAnalysisController.createFile(context, topic, null)
             }
+            "CODE_WRITE" -> CodeController.write(context, result.query ?: result.message ?: result.note ?: "")
             "SCREEN_ASK" -> ScreenUnderstandingController.ask(context, result.query)
             "CAMERA_ASK" -> CameraAskController.ask(context, result.query)
             "TRANSLATE" -> {

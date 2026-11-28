@@ -109,3 +109,12 @@ Not: telefondaki "bilgisayar komutları" önceden olmayan `jarvis_pc_agent.py` d
 - Canlı kamera: panelden soru yaz (boş bırakırsan "ne görüyorsun?") veya "Jarvis, kameradan bak, bu ne?" de. Tek kare çekilir, mevcut vision hattına (Gemini/OpenRouter/GitHub) gider.
 - Dosya panelinde "Fotoğraf" seçeneği: galeriden fotoğraf seçip analiz ettirir.
 - Yeni dosyalar: ui/components/HudKit.kt, ParticleOrb.kt, LiveCameraPanel.kt, commands/CameraAskController.kt
+
+## v28
+- **Sesli okuma temizliği:** emoji, yüz ifadeleri (:) ;) <3), markdown işaretleri, bağlantılar ve kod blokları artık sesli okunmuyor (speech/SpeechSanitizer.kt). Ekranda yazı aynen kalır.
+- **Sürekli sohbet:** ana ekrandaki "Sürekli sohbet" anahtarı açıkken cevap bitince mikrofon kendiliğinden açılır. "Dur", "yeter", "sohbeti bitir" ya da iki kez ses duyulmaması kapatır. Konuşurken mikrofona basarsan Jarvis susar.
+- **Gemini sayacı:** üst çubukta bugünkü başarılı Gemini isteği sayısı (yıldız simgesi). Günlük sayım Pasifik saatine göre sıfırlanır, Google'ın kota sıfırlamasıyla aynı.
+- **Kamera:** panelde Oku / Çevir / Anlat düğmeleri.
+- **Kod yazma:** "Jarvis, python ile ... yapan kod yaz". Kod Download/Jarvis klasörüne doğru uzantıyla kaydedilir, panoya kopyalanır, sohbet panelinde gösterilir; sesli olarak yalnızca açıklama okunur. "Bunu şöyle değiştir" dersen önceki kodu günceller.
+- **Dosya analizi:** PDF (ilk 4 sayfa, vision ile), Word (.docx) ve fotoğraflar da okunur.
+- **Hızlı erişim:** bildirim paneli düğmesi (Jarvis), ana ekran widget'ı (Jarvis) ve uygulama simgesine uzun basınca "Dinle" kısayolu; üçü de uygulamayı açıp hemen dinletir.

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.location.LocationManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.jarvis.assistant.ai.AiUsage
 import com.jarvis.assistant.ai.AssistantAi
 import com.jarvis.assistant.commands.AlarmController
 import com.jarvis.assistant.commands.CameraAskController
@@ -26,6 +27,7 @@ import com.jarvis.assistant.ui.components.VoiceState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 data class JarvisUiState(
     val voiceState: VoiceState = VoiceState.IDLE,
@@ -33,7 +35,8 @@ data class JarvisUiState(
     val transcript: String = "",
     val response: String = "Hazırım. Konuşmak için mikrofona bas ya da arka plan dinlemeyi aç.",
     val history: List<Pair<String, String>> = emptyList(), // (user, jarvis) pairs
-    val backgroundListeningEnabled: Boolean = false
+    val backgroundListeningEnabled: Boolean = false,
+    val continuousChat: Boolean = false
 )
 
 class JarvisViewModel(application: Application) : AndroidViewModel(application) {
@@ -67,8 +70,11 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         onDone = {
             _uiState.value = _uiState.value.copy(voiceState = VoiceState.IDLE)
             // WhatsApp diyaloğunda soru sorulduysa cevabı duymak için mikrofonu kendiliğinden aç.
-            if (messageDialog.awaitingAnswer) {
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ onMicButtonPressed() }, 350)
+            // Sürekli sohbet açıksa cevap bitince kendiliğinden tekrar dinle.
+            if (messageDialog.awaitingAnswer || _uiState.value.continuousChat) {
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    if (_uiState.value.voiceState == VoiceState.IDLE) onMicButtonPressed()
+                }, 350)
             }
         }
     )
@@ -77,6 +83,7 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     val news = NewsSession(viewModelScope) { text -> tts.speak(text) }
 
     init {
+        AiUsage.init(application)
         commandProcessor.newsHandler = { text -> news.handleVoice(text) }
         commandProcessor.newsOpener = { query -> news.open(query) }
         commandProcessor.dialogHandler = { text -> messageDialog.handle(text) }
@@ -95,7 +102,26 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
         tts.speak(question)
     }
 
+    /** Ardışık "ses duyulmadı" sayısı; sürekli sohbet sonsuz döngüye girmesin diye. */
+    private var silentRounds = 0
+
+    /** Sürekli sohbet: cevap bitince mikrofon kendiliğinden açılır. "Dur" ya da "yeter" diyerek kapatılır. */
+    fun setContinuousChat(enabled: Boolean) {
+        silentRounds = 0
+        _uiState.value = _uiState.value.copy(continuousChat = enabled)
+        if (enabled) onMicButtonPressed()
+    }
+
+    private fun isStopPhrase(text: String): Boolean {
+        val norm = text.lowercase(Locale("tr")).replace(Regex("[^\\p{L}\\p{N} ]"), "").trim()
+        return norm in setOf(
+            "dur", "yeter", "tamam yeter", "sus", "sohbeti bitir", "sohbeti kapat",
+            "sohbet modunu kapat", "görüşürüz", "hoşça kal", "şimdilik bu kadar"
+        )
+    }
+
     fun onMicButtonPressed() {
+        tts.stop()
         if (_uiState.value.backgroundListeningEnabled) {
             // İki ses tanıyıcı aynı anda mikrofonu kullanamaz ("cannot record now as Jarvis is recording").
             toggleBackgroundListening(false)
@@ -111,6 +137,20 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
                 onError = { message ->
                     if (messageDialog.awaitingAnswer) messageDialog.cancel()
                     _uiState.value = _uiState.value.copy(voiceState = VoiceState.IDLE, response = message)
+                    if (_uiState.value.continuousChat) {
+                        silentRounds++
+                        if (silentRounds >= 2) {
+                            silentRounds = 0
+                            _uiState.value = _uiState.value.copy(
+                                continuousChat = false,
+                                response = "Bir süredir ses duymadım, sohbet modunu kapattım."
+                            )
+                        } else {
+                            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                                if (_uiState.value.continuousChat && _uiState.value.voiceState == VoiceState.IDLE) onMicButtonPressed()
+                            }, 600)
+                        }
+                    }
                 },
                 onListeningStateChanged = { isListening ->
                     _uiState.value = _uiState.value.copy(
@@ -166,6 +206,18 @@ class JarvisViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun handleRecognizedSpeech(text: String) {
+        silentRounds = 0
+        if (_uiState.value.continuousChat && isStopPhrase(text)) {
+            val bye = "Tamam, sohbet modunu kapattım."
+            _uiState.value = _uiState.value.copy(
+                continuousChat = false,
+                transcript = text,
+                response = bye,
+                history = _uiState.value.history + (text to bye)
+            )
+            tts.speak(bye)
+            return
+        }
         _uiState.value = _uiState.value.copy(transcript = text, voiceState = VoiceState.THINKING)
         viewModelScope.launch {
             val reply = commandProcessor.process(text)

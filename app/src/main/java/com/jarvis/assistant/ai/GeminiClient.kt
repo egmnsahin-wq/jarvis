@@ -47,7 +47,9 @@ object GeminiClient {
             .header("x-goog-api-key", apiKey)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             .build()
-        return client.newCall(request).execute().use { Resp(it.code, it.body?.string().orEmpty()) }
+        val resp = client.newCall(request).execute().use { Resp(it.code, it.body?.string().orEmpty()) }
+        if (resp.code == 200) AiUsage.record()
+        return resp
     }
 
     private fun shouldTryNextModel(r: Resp): Boolean =

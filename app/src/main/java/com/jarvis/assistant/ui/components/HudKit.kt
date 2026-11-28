@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
@@ -269,7 +270,7 @@ private fun StatItem(icon: ImageVector, text: String, tint: Color) {
 }
 
 @Composable
-fun HudStatusChip(stats: HudStats, time: String, compact: Boolean, modifier: Modifier = Modifier) {
+fun HudStatusChip(stats: HudStats, time: String, compact: Boolean, aiCount: Int = -1, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(12.dp)
     Row(
         modifier = modifier
@@ -292,6 +293,7 @@ fun HudStatusChip(stats: HudStats, time: String, compact: Boolean, modifier: Mod
             stats.connection,
             HudCyan
         )
+        if (aiCount >= 0) StatItem(Icons.Filled.AutoAwesome, "$aiCount", HudGold)
         Text(time, color = JarvisTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }

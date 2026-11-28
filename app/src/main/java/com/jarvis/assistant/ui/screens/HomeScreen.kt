@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.jarvis.assistant.ai.AiUsage
 import com.jarvis.assistant.commands.CameraBridge
 import com.jarvis.assistant.data.JarvisViewModel
 import com.jarvis.assistant.data.PreferencesManager
@@ -84,6 +86,7 @@ fun HomeScreen(
     val assistantName = remember(state) { PreferencesManager.getAssistantName(context) }
     val stats by rememberHudStats()
     val clock by rememberClock()
+    val aiCount by AiUsage.today.collectAsState()
 
     var showWave by remember { mutableStateOf(true) }
     var showCamera by remember { mutableStateOf(false) }
@@ -125,6 +128,10 @@ fun HomeScreen(
         onRequestMicPermission()
         viewModel.toggleBackgroundListening(enabled)
     }
+    val onContinuousToggle: (Boolean) -> Unit = { enabled ->
+        onRequestMicPermission()
+        viewModel.setContinuousChat(enabled)
+    }
     val listening = state.voiceState == VoiceState.LISTENING
 
     BoxWithConstraints(
@@ -139,7 +146,7 @@ fun HomeScreen(
         if (wide) {
             // ------------------------------ TABLET (yatay) ------------------------------
             Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                TopBar(assistantName, false, stats, clock, onNews, onOpenSettings)
+                TopBar(assistantName, false, stats, clock, aiCount, onNews, onOpenSettings)
 
                 Row(
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 12.dp),
@@ -180,7 +187,8 @@ fun HomeScreen(
                             )
                         }
                         ReplyText(state.transcript, state.response, maxLines = 3)
-                        BackgroundListenRow(assistantName, state.backgroundListeningEnabled, onBackgroundToggle)
+                        ToggleRow("Arka planda \"$assistantName\" ile uyan", state.backgroundListeningEnabled, onBackgroundToggle)
+                        ToggleRow("Sürekli sohbet (durmadan dinle)", state.continuousChat, onContinuousToggle)
                     }
 
                     Column(
@@ -226,8 +234,9 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize().padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                TopBar(assistantName, true, stats, clock, onNews, onOpenSettings)
-                BackgroundListenRow(assistantName, state.backgroundListeningEnabled, onBackgroundToggle)
+                TopBar(assistantName, true, stats, clock, aiCount, onNews, onOpenSettings)
+                ToggleRow("Arka planda \"$assistantName\" ile uyan", state.backgroundListeningEnabled, onBackgroundToggle)
+                ToggleRow("Sürekli sohbet (durmadan dinle)", state.continuousChat, onContinuousToggle)
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     ParticleOrb(
                         state = state.voiceState,
@@ -319,6 +328,7 @@ private fun TopBar(
     compact: Boolean,
     stats: HudStats,
     time: String,
+    aiCount: Int,
     onNews: () -> Unit,
     onSettings: () -> Unit
 ) {
@@ -333,11 +343,11 @@ private fun TopBar(
                 HudTitle(assistantName.uppercase(), compact = true)
                 HudIconButton(Icons.Filled.Settings, "Ayarlar", JarvisTextSecondary, onSettings)
             }
-            HudStatusChip(stats, time, compact = true, modifier = Modifier.padding(top = 8.dp))
+            HudStatusChip(stats, time, compact = true, aiCount = aiCount, modifier = Modifier.padding(top = 8.dp))
         }
     } else {
         Box(modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)) {
-            HudStatusChip(stats, time, compact = false, modifier = Modifier.align(Alignment.CenterStart))
+            HudStatusChip(stats, time, compact = false, aiCount = aiCount, modifier = Modifier.align(Alignment.CenterStart))
             HudTitle(assistantName.uppercase(), compact = false, modifier = Modifier.align(Alignment.TopCenter))
             Row(
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -379,10 +389,10 @@ private fun ReplyText(transcript: String, response: String, maxLines: Int) {
 }
 
 @Composable
-private fun BackgroundListenRow(assistantName: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+private fun ToggleRow(text: String, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
         Text(
-            text = "Arka planda \"$assistantName\" ile uyan",
+            text = text,
             style = MaterialTheme.typography.bodySmall,
             color = JarvisTextSecondary
         )
@@ -393,7 +403,7 @@ private fun BackgroundListenRow(assistantName: String, enabled: Boolean, onChang
                 checkedThumbColor = JarvisOrange,
                 checkedTrackColor = JarvisOrange.copy(alpha = 0.5f)
             ),
-            modifier = Modifier.padding(start = 8.dp)
+            modifier = Modifier.padding(start = 8.dp).scale(0.8f)
         )
     }
 }

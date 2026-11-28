@@ -51,6 +51,23 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+        handleLaunchIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    /** Bildirim paneli düğmesi, widget ve uygulama kısayolu uygulamayı açıp hemen dinletir. */
+    private fun handleLaunchIntent(launchIntent: Intent?) {
+        if (launchIntent == null) return
+        val start = launchIntent.getBooleanExtra(EXTRA_START_LISTENING, false) ||
+            launchIntent.getStringExtra(EXTRA_START_LISTENING) == "true"
+        if (!start) return
+        launchIntent.removeExtra(EXTRA_START_LISTENING)
+        window.decorView.postDelayed({ viewModel.onMicButtonPressed() }, 700)
     }
 
     /**
@@ -72,5 +89,9 @@ class MainActivity : ComponentActivity() {
         if (missing.isNotEmpty()) {
             permissionLauncher.launch(missing.toTypedArray())
         }
+    }
+
+    companion object {
+        const val EXTRA_START_LISTENING = "start_listening"
     }
 }

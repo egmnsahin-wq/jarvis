@@ -58,7 +58,7 @@ object CameraAskController {
         val bitmap: Bitmap = captured
             ?: return "Kameradan görüntü alamadım. Kamera panelinin açık olduğundan emin ol."
 
-        val base64 = withContext(Dispatchers.Default) { encode(bitmap) }
+        val base64 = withContext(Dispatchers.Default) { encodeJpeg(bitmap) }
         return AssistantAi.analyzeVision(context, buildPrompt(question, "kullanıcının kamerasından alınmış anlık bir görüntü"), base64)
     }
 
@@ -71,7 +71,7 @@ object CameraAskController {
                 null
             }
         } ?: return "Bu fotoğrafı açamadım."
-        val base64 = withContext(Dispatchers.Default) { encode(bitmap) }
+        val base64 = withContext(Dispatchers.Default) { encodeJpeg(bitmap) }
         return AssistantAi.analyzeVision(context, buildPrompt(question, "kullanıcının seçtiği bir fotoğraf"), base64)
     }
 
@@ -84,8 +84,8 @@ object CameraAskController {
         return "Bu, $what. $task Cevap Türkçe olsun ve sesli okunacak; madde işareti, yıldız ya da markdown kullanma."
     }
 
-    private fun encode(src: Bitmap): String {
-        val maxSide = 1024
+    /** Bitmap'i küçültüp JPEG + Base64 yapar (vision isteği için). */
+    fun encodeJpeg(src: Bitmap, maxSide: Int = 1024): String {
         val scale = maxSide.toFloat() / maxOf(src.width, src.height)
         val bmp = if (scale < 1f) {
             Bitmap.createScaledBitmap(src, (src.width * scale).toInt(), (src.height * scale).toInt(), true)

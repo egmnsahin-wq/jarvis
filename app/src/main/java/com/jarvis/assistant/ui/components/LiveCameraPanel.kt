@@ -16,7 +16,11 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -181,7 +185,7 @@ fun LiveCameraPanel(
                 Column(
                     modifier = Modifier.fillMaxSize().padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text("Kamera izni gerekiyor", color = JarvisTextSecondary, fontSize = 13.sp)
                     TextButton(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
@@ -190,11 +194,39 @@ fun LiveCameraPanel(
                 }
             }
         }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            CameraChip("Oku", Modifier.weight(1f)) {
+                onAsk("Görüntüdeki tüm yazıları, mümkünse sıra ve düzenini bozmadan oku.")
+            }
+            CameraChip("Çevir", Modifier.weight(1f)) {
+                onAsk("Görüntüdeki yazıyı Türkçeye çevir. Yazı zaten Türkçeyse kısaca ne anlattığını söyle.")
+            }
+            CameraChip("Anlat", Modifier.weight(1f)) { onAsk(null) }
+        }
         HudInputRow(
             placeholder = "Ne görüyorsun? / soru yaz",
             onSend = { onAsk(it.takeIf { q -> q.isNotBlank() }) },
             allowBlank = true,
             modifier = Modifier.padding(bottom = 4.dp)
         )
+    }
+}
+
+@Composable
+private fun CameraChip(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(HudCyan.copy(alpha = 0.10f))
+            .border(1.dp, HudCyan.copy(alpha = 0.55f), shape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = HudCyan, fontSize = 13.sp)
     }
 }

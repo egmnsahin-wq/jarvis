@@ -51,8 +51,13 @@ class TextToSpeechManager(
     }
 
     fun speak(text: String) {
+        val clean = SpeechSanitizer.clean(text)
+        if (clean.isBlank()) {
+            onDone()
+            return
+        }
         val utteranceId = UUID.randomUUID().toString()
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        tts?.speak(clean, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 
     fun stop() {
