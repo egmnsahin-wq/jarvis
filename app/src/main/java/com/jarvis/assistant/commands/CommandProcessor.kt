@@ -5,6 +5,7 @@ import com.jarvis.assistant.ai.AssistantAi
 import com.jarvis.assistant.ai.IntentSchema
 import com.jarvis.assistant.ai.JarvisIntent
 import com.jarvis.assistant.data.PreferencesManager
+import com.jarvis.assistant.data.SharedLinksStore
 import com.jarvis.assistant.speaker.SpeakerContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -31,6 +32,8 @@ class CommandProcessor(
 ) {
     private val callLogController by lazy { CallLogController(context) }
     private val calendarController by lazy { CalendarController(context) }
+    private val contactSaveController by lazy { ContactSaveController(context) }
+    private val expenseController by lazy { ExpenseController(context) }
 
     /** Set by the UI right after the user picks a file — lets voice commands like
      * "bu dosyayı analiz et" refer to "the file I just picked" without needing a filename. */
@@ -476,6 +479,15 @@ class CommandProcessor(
                 if (topic == null) "Ne hakkında bir dosya oluşturmamı istediğini anlayamadım."
                 else FileAnalysisController.createFile(context, topic, null)
             }
+            "SAVE_UNKNOWN_CALLER" -> contactSaveController.saveLastUnknownCaller(result.contact)
+            "SHARED_LINKS_SEND" -> sendSharedLinks(result)
+            "SHARED_LINKS_LIST" -> SharedLinksStore.summary(context)
+            "SHARED_LINKS_CLEAR" -> {
+                SharedLinksStore.clear(context)
+                "Video listesini temizledim."
+            }
+            "EXPENSE_ADD" -> expenseController.add(result.note, result.query)
+            "EXPENSE_REPORT" -> expenseController.report(result.query)
             "CODE_WRITE" -> CodeController.write(context, result.query ?: result.message ?: result.note ?: "")
             "SCREEN_ASK" -> ScreenUnderstandingController.ask(context, result.query)
             "CAMERA_ASK" -> CameraAskController.ask(context, result.query)
@@ -550,6 +562,33 @@ class CommandProcessor(
             "her seferinde farklı ifadeler seç. Sadece söylenecek metni yaz."
         val ai = AssistantAi.analyzeTextOrNull(context, prompt)?.trim()?.trim('"')
         return if (!ai.isNullOrBlank() && ai.length < 400) ai else technical
+    }
+
+    /** Paylaş menüsüyle biriktirilen bekleyen bağlantıları tek WhatsApp mesajında kişiye gönderir. */
+    private suspend fun sendSharedLinks(result: JarvisIntent): String {
+        val name = result.contact?.let { resolveAlias(it) } ?: return result.reply
+        val pending = SharedLinksStore.pending(context)
+        if (pending.isEmpty()) {
+            return "Jarvis'e kaydedilmiş bekleyen video yok. YouTube ya da Instagram'da Paylaş menüsünden Jarvis'e kaydet'i seçerek ekleyebilirsin."
+        }
+        val number = phoneController.findContactNumber(name) ?: return "$name adında bir kişi bulamadım."
+        val batch = pending.take(15)
+        val text = buildString {
+            append(result.message?.takeIf { it.isNotBlank() } ?: "Sana birkaç video gönderiyorum:")
+            append("\n\n")
+            batch.forEachIndexed { i, item ->
+                append("${i + 1}. ")
+                if (item.title.isNotBlank()) append(item.title).append(" - ")
+                append(item.url).append("\n")
+            }
+        }.trim()
+        val channel = PreferencesManager.getPreference(context, "whatsapp_kanal") ?: "app"
+        val out = whatsAppController.sendMessageAuto(number, text, channel)
+        val failed = listOf("açılamadı", "bulamadım", "bulunamadı").any { out.contains(it, ignoreCase = true) }
+        if (failed) return out
+        SharedLinksStore.markSent(context, batch.map { it.url })
+        val left = pending.size - batch.size
+        return if (left > 0) "$out Bekleyen $left video daha var, istersen onları da göndereyim." else out
     }
 
     /** Runs [action] against result.targetPhone, or falls back to the AI's reply if no phone name was given. */

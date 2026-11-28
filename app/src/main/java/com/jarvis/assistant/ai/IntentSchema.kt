@@ -83,7 +83,7 @@ object IntentSchema {
             Kullanıcının söylediği Türkçe cümleyi analiz et ve SADECE aşağıdaki JSON şemasında,
             başka hiçbir açıklama, markdown ya da kod bloğu olmadan, saf JSON olarak cevap ver:
 
-            {"intent":"<TIME|WEATHER|FLASHLIGHT_ON|FLASHLIGHT_OFF|VOLUME_UP|VOLUME_DOWN|SILENT_ON|SILENT_OFF|BRIGHTNESS_UP|BRIGHTNESS_DOWN|BATTERY|SEARCH_GOOGLE|SEARCH_YOUTUBE|PLAY_SONG|NOTE_ADD|NOTES_READ|NOTES_CLEAR|REMINDER|ALARM|TIMER|CALL|SMS|WHATSAPP|OPEN_APP|SMART_HOME_ON|SMART_HOME_OFF|TV_OPEN_APP|TV_OPEN_URL|TV_POWER_OFF|TV_VOLUME_UP|TV_VOLUME_DOWN|TV_SET_VOLUME|TV_MUTE|TV_UNMUTE|TV_SEARCH_YOUTUBE|REMOTE_PLAY_SONG|REMOTE_SEARCH_GOOGLE|REMOTE_SEARCH_YOUTUBE|REMOTE_SET_ALARM|REMOTE_REMINDER|REMOTE_CALL|REMOTE_SMS|REMOTE_WHATSAPP|REMOTE_OPEN_APP|REMOTE_FLASHLIGHT_ON|REMOTE_FLASHLIGHT_OFF|REMOTE_BATTERY|REMOTE_FIND_PHONE|REMOTE_NOTIFY|MEMORY_SAVE|MEMORY_READ|MEMORY_CLEAR|BRIGHTNESS_SET|WIFI_SETTINGS|BLUETOOTH_SETTINGS|FIND_MY_PHONE|ALARM_LIST|MISSED_CALLS|REMOTE_BATTERY_ALL|TODO_ADD|TODO_DONE|TODO_LIST|TODO_CLEAR_DONE|ALIAS_SET|TEMPLATE_SET|TEMPLATE_SEND|CALCULATE|CURRENCY|NEWS|DAILY_SUMMARY|CONVERSATION_EXPORT|HOME_WIFI_SET|ARRIVAL_REMINDER|PC_OPEN_APP|PC_OPEN_URL|PC_SHUTDOWN|PC_RESTART|PC_SLEEP|PC_LOCK|PC_VOLUME_UP|PC_VOLUME_DOWN|PC_MUTE|PC_MEDIA_PLAY_PAUSE|PC_MEDIA_NEXT|PC_MEDIA_PREV|FILE_ANALYZE|FILE_ANALYZE_TO_FILE|CREATE_FILE|CODE_WRITE|SCREEN_ASK|CAMERA_ASK|TRANSLATE|CALENDAR_ADD_EVENT|CALENDAR_TODAY|LEAVE_REMINDER|PREFERENCE_SET|SELF_CHECK|CHAT>",
+            {"intent":"<TIME|WEATHER|FLASHLIGHT_ON|FLASHLIGHT_OFF|VOLUME_UP|VOLUME_DOWN|SILENT_ON|SILENT_OFF|BRIGHTNESS_UP|BRIGHTNESS_DOWN|BATTERY|SEARCH_GOOGLE|SEARCH_YOUTUBE|PLAY_SONG|NOTE_ADD|NOTES_READ|NOTES_CLEAR|REMINDER|ALARM|TIMER|CALL|SMS|WHATSAPP|OPEN_APP|SMART_HOME_ON|SMART_HOME_OFF|TV_OPEN_APP|TV_OPEN_URL|TV_POWER_OFF|TV_VOLUME_UP|TV_VOLUME_DOWN|TV_SET_VOLUME|TV_MUTE|TV_UNMUTE|TV_SEARCH_YOUTUBE|REMOTE_PLAY_SONG|REMOTE_SEARCH_GOOGLE|REMOTE_SEARCH_YOUTUBE|REMOTE_SET_ALARM|REMOTE_REMINDER|REMOTE_CALL|REMOTE_SMS|REMOTE_WHATSAPP|REMOTE_OPEN_APP|REMOTE_FLASHLIGHT_ON|REMOTE_FLASHLIGHT_OFF|REMOTE_BATTERY|REMOTE_FIND_PHONE|REMOTE_NOTIFY|MEMORY_SAVE|MEMORY_READ|MEMORY_CLEAR|BRIGHTNESS_SET|WIFI_SETTINGS|BLUETOOTH_SETTINGS|FIND_MY_PHONE|ALARM_LIST|MISSED_CALLS|REMOTE_BATTERY_ALL|TODO_ADD|TODO_DONE|TODO_LIST|TODO_CLEAR_DONE|ALIAS_SET|TEMPLATE_SET|TEMPLATE_SEND|CALCULATE|CURRENCY|NEWS|DAILY_SUMMARY|CONVERSATION_EXPORT|HOME_WIFI_SET|ARRIVAL_REMINDER|PC_OPEN_APP|PC_OPEN_URL|PC_SHUTDOWN|PC_RESTART|PC_SLEEP|PC_LOCK|PC_VOLUME_UP|PC_VOLUME_DOWN|PC_MUTE|PC_MEDIA_PLAY_PAUSE|PC_MEDIA_NEXT|PC_MEDIA_PREV|FILE_ANALYZE|FILE_ANALYZE_TO_FILE|CREATE_FILE|CODE_WRITE|SAVE_UNKNOWN_CALLER|SHARED_LINKS_SEND|SHARED_LINKS_LIST|SHARED_LINKS_CLEAR|EXPENSE_ADD|EXPENSE_REPORT|SCREEN_ASK|CAMERA_ASK|TRANSLATE|CALENDAR_ADD_EVENT|CALENDAR_TODAY|LEAVE_REMINDER|PREFERENCE_SET|SELF_CHECK|CHAT>",
              "query":"<arama/şarkı metni varsa, yoksa null>",
              "note":"<not edilecek metin varsa, yoksa null>",
              "minutes":<hatırlatıcı/sayaç için dakika sayısı varsa, yoksa null>,
@@ -271,6 +271,19 @@ object IntentSchema {
             - "kod yaz", "python scripti yaz", "bir fonksiyon yaz", "html sayfası yap", "bu kodu düzelt/değiştir",
               "şöyle bir program yaz" gibi YAZILIM isteklerinde -> CODE_WRITE, query alanına isteğin tamamını
               kullanıcının kelimeleriyle yaz. Kod dışı belge/metin dosyası istekleri CREATE_FILE'dır.
+            - "az önce arayan / son arayan kayıtlı olmayan (yabancı) numarayı [isim] diye kaydet",
+              "bilinmeyen numarayı rehbere [isim] adıyla ekle" -> SAVE_UNKNOWN_CALLER, contact alanına
+              kaydedilecek ismi yaz.
+            - Video/bağlantı biriktirme: kullanıcı YouTube/Instagram'da Paylaş menüsünden "Jarvis'e kaydet"
+              ile video biriktirir. "kaydettiğim videoları [kişi]'ye gönder", "biriktirdiğim linkleri
+              [kişi]'ye at" -> SHARED_LINKS_SEND, contact alanına kişiyi yaz (ek bir not söylediyse message
+              alanına yaz). "kaç video biriktirdim", "kaydettiğim videolar neler" -> SHARED_LINKS_LIST.
+              "video listesini temizle" -> SHARED_LINKS_CLEAR.
+            - Harcama defteri: "markette 250 lira harcadım", "benzine 1000 TL verdim" -> EXPENSE_ADD,
+              note alanına SADECE tutarı sayı olarak yaz (250 ya da 99.5), query alanına tek kelimelik kategori
+              (market, yemek, ulaşım, fatura, giyim, eğlence, sağlık, diğer). "bu hafta ne kadar harcadım",
+              "bugünkü harcamalarım", "bu ay harcama özeti" -> EXPENSE_REPORT, query alanına
+              bugun, hafta, ay ya da hepsi yaz (belirtmediyse ay).
             - Sistem durumunu, neden çalışmadığını ya da \"sorun ne\", \"neden cevap vermiyorsun\", \"durumunu
               kontrol et\" gibi şeyleri sorarsa intent SELF_CHECK.
             - \"reply\" her seferinde farklı kalıplarla, bir insan gibi: bazen kısa, bazen samimi; aynı

@@ -4,4 +4,5 @@
     <string name="shortcut_listen_short">Dinle</string>
     <string name="shortcut_listen_long">Jarvis\'i dinlet</string>
     <string name="tile_label">Jarvis</string>
+    <string name="share_label">Jarvis\'e kaydet</string>
 </resources>

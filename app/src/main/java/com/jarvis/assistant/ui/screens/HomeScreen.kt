@@ -4,6 +4,13 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import java.util.Locale
+import java.util.Date
+import java.text.SimpleDateFormat
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -94,6 +101,7 @@ fun HomeScreen(
     var showChat by remember { mutableStateOf(false) }          // yalnızca telefon düzeninde kaplama
     var chatCollapsed by remember { mutableStateOf(false) }     // yalnızca tablet düzeninde
     var cameraOffset by remember { mutableStateOf(Offset.Zero) }
+    var deskMode by remember { mutableStateOf(false) }
 
     // "Jarvis, kameradan bak" komutu paneli kendiliğinden açabilsin.
     DisposableEffect(Unit) {
@@ -189,6 +197,7 @@ fun HomeScreen(
                         ReplyText(state.transcript, state.response, maxLines = 3)
                         ToggleRow("Arka planda \"$assistantName\" ile uyan", state.backgroundListeningEnabled, onBackgroundToggle)
                         ToggleRow("Sürekli sohbet (durmadan dinle)", state.continuousChat, onContinuousToggle)
+                        ToggleRow("Masa modu (büyük saat, ekran açık kalır)", deskMode) { deskMode = it }
                     }
 
                     Column(
@@ -237,6 +246,7 @@ fun HomeScreen(
                 TopBar(assistantName, true, stats, clock, aiCount, onNews, onOpenSettings)
                 ToggleRow("Arka planda \"$assistantName\" ile uyan", state.backgroundListeningEnabled, onBackgroundToggle)
                 ToggleRow("Sürekli sohbet (durmadan dinle)", state.continuousChat, onContinuousToggle)
+                ToggleRow("Masa modu (büyük saat, ekran açık kalır)", deskMode) { deskMode = it }
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     ParticleOrb(
                         state = state.voiceState,
@@ -313,6 +323,19 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
+
+        if (deskMode) {
+            DeskMode(
+                time = clock,
+                stats = stats,
+                voiceState = state.voiceState,
+                amplitude = state.amplitude,
+                response = state.response,
+                large = wide,
+                onMic = onMic,
+                onExit = { deskMode = false }
+            )
         }
 
         val newsState by viewModel.news.state.collectAsState()
@@ -404,6 +427,76 @@ private fun ToggleRow(text: String, enabled: Boolean, onChange: (Boolean) -> Uni
                 checkedTrackColor = JarvisOrange.copy(alpha = 0.5f)
             ),
             modifier = Modifier.padding(start = 8.dp).scale(0.8f)
+        )
+    }
+}
+
+/** Masa modu: tam ekran büyük saat, ekran açık kalır, orba dokununca Jarvis dinler, saate dokununca çıkılır. */
+@Composable
+private fun DeskMode(
+    time: String,
+    stats: HudStats,
+    voiceState: VoiceState,
+    amplitude: Float,
+    response: String,
+    large: Boolean,
+    onMic: () -> Unit,
+    onExit: () -> Unit
+) {
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
+    val date = remember(time.take(5)) { SimpleDateFormat("EEEE, d MMMM", Locale("tr")).format(Date()) }
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color.Black).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = time.take(5),
+            color = JarvisTextPrimary,
+            fontSize = if (large) 150.sp else 88.sp,
+            fontWeight = FontWeight.Light,
+            modifier = Modifier.clickable(onClick = onExit)
+        )
+        Text(
+            text = date.replaceFirstChar { it.uppercase() },
+            color = JarvisTextSecondary,
+            fontSize = if (large) 28.sp else 18.sp
+        )
+        Text(
+            text = "%${stats.batteryPercent}${if (stats.charging) " (şarjda)" else ""}  ·  ${stats.connection}",
+            color = JarvisTextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 6.dp)
+        )
+        Spacer(Modifier.height(28.dp))
+        Box(modifier = Modifier.clickable(onClick = onMic)) {
+            ParticleOrb(
+                state = voiceState,
+                amplitude = amplitude,
+                diameter = if (large) 240.dp else 170.dp,
+                particleCount = 420
+            )
+        }
+        if (response.isNotBlank()) {
+            Text(
+                text = response,
+                color = JarvisTextPrimary,
+                fontSize = 15.sp,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+        }
+        Text(
+            text = "Saate dokunarak masa modundan çık",
+            color = JarvisTextSecondary.copy(alpha = 0.6f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 16.dp)
         )
     }
 }

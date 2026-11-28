@@ -118,3 +118,9 @@ Not: telefondaki "bilgisayar komutları" önceden olmayan `jarvis_pc_agent.py` d
 - **Kod yazma:** "Jarvis, python ile ... yapan kod yaz". Kod Download/Jarvis klasörüne doğru uzantıyla kaydedilir, panoya kopyalanır, sohbet panelinde gösterilir; sesli olarak yalnızca açıklama okunur. "Bunu şöyle değiştir" dersen önceki kodu günceller.
 - **Dosya analizi:** PDF (ilk 4 sayfa, vision ile), Word (.docx) ve fotoğraflar da okunur.
 - **Hızlı erişim:** bildirim paneli düğmesi (Jarvis), ana ekran widget'ı (Jarvis) ve uygulama simgesine uzun basınca "Dinle" kısayolu; üçü de uygulamayı açıp hemen dinletir.
+
+## v29
+- **Kayıtsız arayanı rehbere kaydet:** "Son arayan kayıtsız numarayı Ahmet diye kaydet". Arama geçmişindeki rehberde olmayan en son numarayı bulur, rehbere ekler ve numarayı söyler. Yeni izin: Kişiler (yazma).
+- **Video biriktir ve gönder:** YouTube/Instagram/TikTok'ta Paylaş > "Jarvis'e kaydet" bağlantıyı listeye ekler (uygulamadan çıkmadan). "Kaydettiğim videoları Ali'ye gönder" bekleyenleri tek WhatsApp mesajında yollar (en fazla 15, gerisi sıradaki gönderime kalır). "Kaç video biriktirdim", "video listesini temizle" de çalışır.
+- **Harcama defteri:** "Markette 250 lira harcadım" kaydeder, "bu hafta ne kadar harcadım" kategorilere göre özet verir. Veriler yalnızca cihazda durur.
+- **Masa modu:** ana ekrandaki anahtar; tam ekran büyük saat, pil/bağlantı bilgisi, ekran açık kalır, orba dokununca Jarvis dinler, saate dokununca çıkılır.
